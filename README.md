@@ -1,173 +1,173 @@
 # E210 Thermal Printer Linux
 
-Aplicação Python para imprimir imagens PNG na impressora térmica Bluetooth **E210 pelo Linux**, sem depender do celular ou do aplicativo Qlabel durante a impressão.
+Python application to print PNG images on the Bluetooth **E210 thermal printer from Linux**, without relying on a smartphone or the QLabel app during printing.
 
-A impressão foi validada fisicamente em uma E210 com **papel contínuo de 50 mm**, usando CachyOS e BlueZ. Tanto o padrão geométrico quanto um PNG enviado pela linha de comando foram impressos corretamente.
+Printing has been physically validated on an E210 with **50 mm continuous paper**, using CachyOS and BlueZ. Both a geometric test pattern and PNG images sent from the command line printed successfully.
 
-## Requisitos
+## Requirements
 
-- Linux com BlueZ ativo e adaptador Bluetooth com suporte a Bluetooth clássico/RFCOMM.
-- Python 3, Pillow, dbus-python e PyGObject.
-- E210 ligada, com papel contínuo de 50 mm, sem conexão ativa com o celular.
+- Linux with active BlueZ service and a Bluetooth adapter supporting Classic Bluetooth/RFCOMM.
+- Python 3, Pillow, dbus-python, and PyGObject.
+- E210 turned on, loaded with 50 mm continuous paper, with no active connection to a smartphone.
 
-A comunicação usa as APIs D-Bus atuais do BlueZ. Não é necessário instalar `sdptool` ou as ferramentas Bluetooth descontinuadas.
+Communication uses modern BlueZ D-Bus APIs. Installing `sdptool` or deprecated Bluetooth utilities is not required.
 
-## Instalação
+## Installation
 
-Clone o projeto e entre na pasta:
+Clone the repository and enter the directory:
 
 ```bash
 git clone https://github.com/ggvaldez/E210ThermalPrinterLinux.git
 cd E210ThermalPrinterLinux
 ```
 
-No CachyOS ou Arch Linux, instale as dependências nativas:
+On CachyOS or Arch Linux, install native dependencies:
 
 ```bash
 sudo pacman -S --needed bluez bluez-utils python python-pillow python-dbus python-gobject
 sudo systemctl enable --now bluetooth.service
 ```
 
-Em outras distribuições, instale os pacotes equivalentes pelo gerenciador da distribuição. A implementação não depende especificamente do CachyOS, mas outras distribuições ainda não foram testadas neste projeto. Os exemplos abaixo usam `python`; se sua distribuição disponibiliza o interpretador como `python3`, substitua o comando.
+On other distributions, install the equivalent packages using your system package manager. The implementation does not depend specifically on CachyOS, though other distributions have not yet been tested in this project. The examples below use `python`; if your distribution provides the interpreter as `python3`, adjust the command accordingly.
 
-## Descoberta automática
+## Automatic Discovery
 
-Sem `--address`, o próprio script procura por uma E210 durante 10 segundos no adaptador selecionado:
+Without `--address`, the script searches for an E210 for 10 seconds on the selected adapter:
 
 ```bash
-python tools/print_png.py imagem.png
+python tools/print_png.py image.png
 ```
 
-Ligue a impressora e desconecte-a do celular antes de executar. A busca usa Bluetooth clássico via BlueZ. Se encontrar uma E210, mostra o endereço e imprime; se nenhuma for encontrada, informa o problema. Se houver mais de uma, lista os endereços e pede que você escolha usando `--address`. `--adapter hci1` permite escolher outro adaptador. `--dry-run` não inicia busca nem conexão Bluetooth.
+Turn on the printer and disconnect it from your smartphone before running. The search uses Classic Bluetooth via BlueZ. If an E210 is found, it displays the address and prints; if none is found, it reports the issue. If more than one printer is found, it lists their addresses and asks you to specify one with `--address`. `--adapter hci1` allows choosing a different adapter. `--dry-run` skips discovery and Bluetooth connection.
 
-### Descobrir o endereço manualmente
+### Discovering the Address Manually
 
-Ligue a E210 e desconecte o Qlabel ou desative o Bluetooth do celular. No terminal, execute:
+Turn on the E210 and disconnect QLabel or turn off Bluetooth on your smartphone. In the terminal, run:
 
 ```bash
 bluetoothctl
 ```
 
-Dentro do `bluetoothctl`:
+Inside `bluetoothctl`:
 
 ```text
 power on
 scan on
 ```
 
-Aguarde aparecer uma linha semelhante a esta e anote o endereço da sua impressora:
+Wait for a line similar to this to appear and note your printer's address:
 
 ```text
 Device AA:BB:CC:DD:EE:FF E210
 ```
 
-Encerre a busca e saia:
+Stop scanning and exit:
 
 ```text
 scan off
 quit
 ```
 
-Na unidade testada, a conexão funcionou sem pareamento manual. O programa descobre o canal serial pelo UUID do serviço; não é necessário configurar um canal RFCOMM.
+On the tested unit, connection worked without manual pairing. The program discovers the serial channel via service UUID; configuring an RFCOMM channel manually is not necessary.
 
-## Imprimir um PNG
+## Printing a PNG
 
-Execute na raiz do projeto, substituindo o caminho da imagem e o endereço Bluetooth:
-
-```bash
-python tools/print_png.py imagem.png --address AA:BB:CC:DD:EE:FF
-```
-
-Cada execução imprime **uma cópia** por padrão. Caminhos com espaços devem ficar entre aspas.
-
-### Etiquetas com intervalo e múltiplas cópias
-
-Para três cópias em etiquetas de 50 × 50 mm com intervalo entre elas:
+Run from the project root, replacing the image path and Bluetooth address:
 
 ```bash
-python tools/print_png.py imagem.png --address AA:BB:CC:DD:EE:FF --media gap --label-height 50 --copies 3
+python tools/print_png.py image.png --address AA:BB:CC:DD:EE:FF
 ```
 
-`--label-height` é a altura da etiqueta em milímetros, sem incluir o intervalo; a largura da mídia permanece em 50 mm. O raster mantém sua proporção e precisa caber na altura informada. `--media` aceita `continuous` (padrão), `gap` e `black-mark`. Etiquetas com intervalo ou marca preta exigem altura explícita. A opção de marca preta foi identificada no Java, mas ainda não foi testada fisicamente. Cada cópia envia uma página completa com seu comando de avanço; não depende de um contador interno de cópias no firmware.
+Each run prints **one copy** by default. Paths containing spaces must be enclosed in quotes.
 
-A imagem é redimensionada para **384 pixels de largura**, preservando a proporção. Essa é a maior largura raster validada até agora, equivalente a **48 mm a 8 pixels/mm**, aproximadamente 203 dpi. Ainda não determinamos o limite físico absoluto da impressora.
+### Gap Labels and Multiple Copies
 
-Para máxima nitidez e controle pixel a pixel, prepare o PNG já com 384 pixels de largura. Um arquivo de 384 × 384 pixels produz um raster de aproximadamente 48 × 48 mm. Metadados DPI do PNG não alteram o tamanho; a altura é calculada a partir da proporção da imagem. O avanço e as margens físicas podem diferir do tamanho do raster.
-
-Transparência é composta sobre fundo branco. Tons de cinza são convertidos para preto e branco com dithering Floyd–Steinberg. O envio ocorre **sem pausas artificiais**, respeitando a disponibilidade do socket Bluetooth. Cada cópia termina com **`1B 69` seguido de `1B 4A 00`**, para concluir a impressão antes do avanço. A ordem se aplica a todos os modos; o tipo de mídia continua sendo configurado separadamente.
-
-### Prévia sem imprimir
+To print three copies on 50 × 50 mm labels with gaps:
 
 ```bash
-python tools/print_png.py imagem.png --dry-run --preview previa.png
+python tools/print_png.py image.png --address AA:BB:CC:DD:EE:FF --media gap --label-height 50 --copies 3
 ```
 
-Esse comando prepara a imagem sem conectar à impressora. A prévia não sobrescreve arquivos existentes.
+`--label-height` is the physical label height in millimeters, excluding the gap; media width remains 50 mm. The raster preserves its aspect ratio and must fit within the specified height. `--media` accepts `continuous` (default), `gap`, and `black-mark`. Gap and black-mark labels require an explicit height. The black-mark option was identified in Java, but has not yet been physically tested. Each copy sends a complete page with its own feed command; it does not rely on an internal firmware copy counter.
 
-### Ajustes
+Images are resized to **384 pixels wide**, preserving aspect ratio. This is the largest raster width validated so far, equivalent to **48 mm at 8 dots/mm**, approximately 203 dpi. The absolute physical limit of the printer is not yet established.
 
-Para usar um limiar fixo de preto e branco, em vez de dithering:
+For maximum sharpness and pixel-level control, prepare the PNG already at 384 pixels wide. A 384 × 384 pixel file produces an approximately 48 × 48 mm raster. PNG DPI metadata does not affect dimensions; height is calculated from the aspect ratio. Physical margins and feed distance may differ from raster size.
+
+Transparency is composited over white. Grayscale images are converted to black and white using Floyd–Steinberg dithering. Transmission occurs **without artificial pauses**, following Bluetooth socket readiness. Each copy ends with **`1B 69` followed by `1B 4A 00`**, ensuring printing completes before feeding. This ordering applies to all modes; media type is configured separately.
+
+### Preview Without Printing
 
 ```bash
-python tools/print_png.py imagem.png --address AA:BB:CC:DD:EE:FF --threshold 128
+python tools/print_png.py image.png --dry-run --preview preview.png
 ```
 
-Para ajustar a densidade térmica ou selecionar outro adaptador:
+This prepares the image without connecting to the printer. The preview command will not overwrite existing files.
+
+### Settings and Adjustments
+
+To use a fixed black-and-white threshold instead of dithering:
 
 ```bash
-python tools/print_png.py imagem.png --address AA:BB:CC:DD:EE:FF --density 6 --adapter hci0
+python tools/print_png.py image.png --address AA:BB:CC:DD:EE:FF --threshold 128
 ```
 
-`--density` aceita valores de 0 a 16 e tem padrão 6. `--threshold` aceita de 0 a 255.
+To adjust thermal density or select another adapter:
 
-Para experimentar um envio mais lento, use `--pause-ms 50`. O padrão é **0 ms**. A pausa vale entre comandos e linhas; o prazo da conexão é ajustado à duração estimada do trabalho. Alterar a pausa não altera os pixels nem a densidade térmica configurada.
+```bash
+python tools/print_png.py image.png --address AA:BB:CC:DD:EE:FF --density 6 --adapter hci0
+```
 
-O envio sem pausas, com a ordem corrigida dos comandos finais, foi validado fisicamente com **20 escadas consecutivas**, completas e coladas, totalizando 87.160 bytes. Houve pausas do mecanismo durante o trabalho, sem perda de conteúdo observada. Isso não determina o tamanho do buffer interno.
+`--density` accepts values from 0 to 16 (default: 6). `--threshold` accepts 0 to 255.
 
-Para diagnóstico, `--finish-delay-ms 2000` insere 2 segundos antes do par de comandos finais de cada cópia. O padrão é zero: atrasos adicionais não foram necessários no teste das 20 escadas. A validação extensa da ordem corrigida foi feita com papel contínuo; o avanço em etiquetas com sensor ainda precisa ser reconfirmado.
+To test slower transmission, use `--pause-ms 50`. The default is **0 ms**. The pause applies between commands and rows; the connection timeout scales to the estimated job duration. Changing pause does not alter pixels or configured thermal density.
 
-Consulte todas as opções com:
+Unpaused transmission with corrected termination command order was physically validated with **20 consecutive staircases**, complete and joined, totaling 87,160 bytes. Mechanical pauses occurred during execution with no observed loss of content. This does not define the internal buffer capacity.
+
+For diagnostics, `--finish-delay-ms 2000` inserts 2 seconds before the final command pair of each copy. The default is zero: extra delays were not needed in the 20-staircase test. Extensive validation of the corrected order was performed on continuous paper; feed behavior on sensor-equipped labels should still be reconfirmed.
+
+View all options with:
 
 ```bash
 python tools/print_png.py --help
 ```
 
-## Diagnóstico
+## Troubleshooting
 
-- **Erro ao importar PIL, dbus ou gi:** confira as dependências e use o Python do sistema que recebeu os pacotes nativos.
-- **Não conecta:** confira a alimentação, o endereço Bluetooth e o serviço `bluetooth.service`; desconecte a impressora de outros dispositivos. A conta deve ter acesso ao serviço BlueZ no barramento D-Bus do sistema.
-- **Desenho incompleto ou avanço antes de terminar:** atualize o código. A sequência inicial avançava antes da conclusão; os testes validaram a inversão dos dois comandos finais.
-- **Pausas durante um trabalho longo:** o teste de 20 escadas apresentou pausas, mas concluiu todas as imagens. O programa preserva escritas parciais do socket e não reenvia trabalhos automaticamente. Se uma impressão falhar, confira o que já saiu antes de reenviar para evitar cópias duplicadas.
+- **Error importing PIL, dbus, or gi:** check dependencies and make sure you are using the system Python where native packages were installed.
+- **Cannot connect:** check power, Bluetooth address, and `bluetooth.service`; disconnect printer from other devices. Your user account must have access to BlueZ over the system D-Bus.
+- **Incomplete print or feeding before finishing:** update code. The initial sequence fed before completion; physical testing validated reversing the final two commands.
+- **Pauses during a long job:** the 20-staircase test showed pauses but finished every image. The program handles partial socket writes and does not automatically retry failed jobs. If a print fails, check physical output before re-sending to avoid duplicate copies.
 
-Para consultar o status sem imprimir:
+To query status without printing:
 
 ```bash
 python tools/probe_bluez.py AA:BB:CC:DD:EE:FF --query status --timeout 20
 ```
 
-“Envio concluído” confirma a transferência ao socket, não a saída física do papel. Nos testes, a impressão correta foi confirmada por observação do usuário.
+"Send completed" confirms socket transmission, not physical paper exit. In our tests, successful printing was confirmed through physical user observation.
 
-## Outras impressoras e plataformas
+## Other Printers and Platforms
 
-**Precisa de suporte a outra impressora ou a outra plataforma, como Windows ou macOS? [Abra uma issue](https://github.com/ggvaldez/E210ThermalPrinterLinux/issues).**
+**Need support for another printer or platform, such as Windows or macOS? [Open an issue](https://github.com/ggvaldez/E210ThermalPrinterLinux/issues).**
 
-Informe o modelo exato, o sistema operacional e sua versão e, se houver, o aplicativo que funciona com o equipamento. Essas informações ajudam a investigar a compatibilidade. Novos modelos e plataformas ainda precisam de implementação e testes.
+Please provide the exact model, operating system and version, and any working mobile app. This information helps assess compatibility. New models and platforms require dedicated implementation and testing.
 
-A conversão de PNG e a codificação dos comandos usam Python e podem ser reaproveitadas em outras plataformas. A conexão atual depende do BlueZ no Linux. Não presumimos que outras impressoras usem o mesmo protocolo da E210.
+PNG conversion and command encoding are written in Python and can be ported to other platforms. The current Bluetooth connection relies on BlueZ on Linux. We do not assume that other printers use the same protocol as the E210.
 
-## Desenvolvimento e documentação
+## Development and Documentation
 
-Para executar os testes automatizados:
+To run automated tests:
 
 ```bash
 python -m unittest discover -s tests -v
 ```
 
-- [Análise Java e formato dos comandos](docs/ANALISE_JAVA.md)
-- [Conexão BlueZ e resultados dos testes físicos](docs/BLUETOOTH_LINUX.md)
-- [Roteiro de investigação](docs/INVESTIGACAO.md)
+- [Java analysis and command format](docs/JAVA_ANALYSIS.md)
+- [BlueZ connection and physical test results](docs/BLUETOOTH_LINUX.md)
+- [Investigation roadmap](docs/INVESTIGATION.md)
 - [Roadmap](ROADMAP.md)
 
-O Qlabel 29.0.22 serviu de referência para investigar o protocolo. A aplicação Python não precisa do APK, do Android ou de bibliotecas nativas extraídas do aplicativo para funcionar.
+QLabel 29.0.22 served as reference to investigate the protocol. The Python application does not require the APK, Android, or extracted native libraries to function.
 
-APKs, decompilações, logs e capturas locais ficam fora do controle de versão. Revise identificadores de dispositivos antes de publicar capturas ou logs em uma issue.
+APKs, decompilations, logs, and local captures are kept out of version control. Review device identifiers before posting captures or logs in an issue.

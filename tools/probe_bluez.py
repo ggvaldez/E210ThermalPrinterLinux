@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Diagnóstico BlueZ da E210; impressão somente com --print-test explícito."""
+"""E210 BlueZ diagnostic; printing only with explicit --print-test."""
 
 import argparse
 import json
@@ -101,7 +101,7 @@ class Profile(dbus.service.Object):
         try:
             count = self.stream.send(self.pending)
             if count == 0:
-                raise OSError('Socket fechado durante o envio')
+                raise OSError('Socket closed during send')
             self.pending = self.pending[count:]
         except BlockingIOError:
             return True
@@ -173,21 +173,21 @@ class Profile(dbus.service.Object):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('address', help='Endereço Bluetooth da impressora')
+    parser.add_argument('address', help='Bluetooth address of the printer')
     parser.add_argument('--adapter', default='hci0')
     action = parser.add_mutually_exclusive_group()
     action.add_argument('--query', nargs='?', const='settings', choices=QUERIES,
-                        help='Consultar settings (1B 5E), status (1B 06) ou model (1B 18)')
+                        help='Query settings (1B 5E), status (1B 06), or model (1B 18)')
     action.add_argument('--print-test', action='store_true',
-                        help='IMPRIMIR um padrão em mídia contínua de 50 mm, comprimento nominal 20 mm')
+                        help='PRINT a test pattern on 50 mm continuous media, nominal length 20 mm')
     action.add_argument('--feed-test', action='store_true',
-                        help='Enviar somente avanço 1B 4A 20 (32 unidades, distância não calibrada)')
+                        help='Send feed only 1B 4A 20 (32 units, uncalibrated distance)')
     action.add_argument('--paced-print-test', action='store_true',
-                        help='IMPRIMIR o mesmo padrão com pausas de 20 ms entre comandos/linhas')
+                        help='PRINT the same pattern with 20 ms pauses between commands/rows')
     parser.add_argument('--timeout', type=int, default=25)
     args = parser.parse_args()
     if args.timeout <= 0:
-        parser.error('--timeout deve ser positivo')
+        parser.error('--timeout must be positive')
     return run_connection(args.address, args.adapter, args.timeout,
                           lambda bus, loop: Profile(bus, loop, args.query,
                                                     args.print_test or args.paced_print_test,
@@ -237,7 +237,7 @@ def run_connection(address, adapter_name, timeout, profile_factory):
         GLib.timeout_add_seconds(timeout, expire)
         loop.run()
     except (dbus.DBusException, KeyboardInterrupt) as exc:
-        profile.error = str(exc) or 'Interrompido'
+        profile.error = str(exc) or 'Interrupted'
         print(profile.error, file=sys.stderr)
     finally:
         profile.close()

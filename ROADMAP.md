@@ -1,33 +1,33 @@
 # Roadmap
 
-## 1. Identificação e comunicação
+## 1. Identification and Communication
 
-- [ ] Registrar fotos ou informações da etiqueta do equipamento, variante e firmware, se disponíveis.
-- [x] Identificar o Qlabel por URL da Play Store, nome do pacote e versão.
-- [ ] Registrar distribuição Linux, kernel e adaptador Bluetooth usados nos testes.
-- [ ] Verificar descoberta e pareamento no Linux.
-- [x] Identificar o transporte usado no caminho testado: Bluetooth clássico/RFCOMM.
-- [ ] Registrar serviços, UUIDs, características e propriedades disponíveis.
+- [ ] Record photos or information from the device label, variant, and firmware, if available.
+- [x] Identify QLabel by Play Store URL, package name, and version.
+- [ ] Record Linux distribution, kernel, and Bluetooth adapter used in tests.
+- [ ] Verify discovery and pairing on Linux.
+- [x] Identify the transport used in the tested path: Classic Bluetooth/RFCOMM.
+- [ ] Record available services, UUIDs, characteristics, and properties.
 
-## 2. Protocolo
+## 2. Protocol
 
-- [ ] Capturar uma sessão de impressão conhecida com o Qlabel.
-- [ ] Relacionar os dados enviados ao conteúdo e às dimensões da etiqueta.
-- [x] Identificar configuração, codificação raster e finalização para a prova de conceito.
-- [ ] Determinar fragmentação, limites de envio, confirmações e temporização.
-- [x] Documentar o caminho raster com exemplos e nível de confiança das conclusões.
+- [ ] Capture a known print session with QLabel.
+- [ ] Correlate transmitted data with label content and dimensions.
+- [x] Identify configuration, raster encoding, and termination for the proof of concept.
+- [ ] Determine fragmentation, send limits, acknowledgments, and timing.
+- [x] Document the raster path with examples and confidence levels for conclusions.
 
-## 3. Prova de conceito Linux
+## 3. Linux Proof of Concept
 
-- [x] Implementar conexão e envio com base no protocolo observado.
-- [x] Imprimir uma etiqueta de teste na E210 física.
-- [x] Registrar o procedimento completo e os resultados.
-- [ ] Tratar desconexão, indisponibilidade e erros observados.
+- [x] Implement connection and transmission based on the observed protocol.
+- [x] Print a test label on the physical E210.
+- [x] Document the complete procedure and results.
+- [ ] Handle disconnection, unavailability, and observed errors.
 
-## 4. Uso cotidiano
+## 4. Daily Usage
 
-- [x] Implementar conversão de PNG para o formato aceito pela impressora.
-- [x] Disponibilizar interface de linha de comando.
-- [x] Documentar instalação, permissões e solução de problemas.
-- [x] Adicionar testes para os componentes de protocolo e imagem.
-- [ ] Avaliar integração com CUPS após estabilizar a impressão direta.
+- [x] Implement PNG conversion to the format accepted by the printer.
+- [x] Provide a command-line interface.
+- [x] Document installation, permissions, and troubleshooting.
+- [x] Add tests for protocol and image processing components.
+- [ ] Evaluate CUPS integration after direct printing stabilizes.

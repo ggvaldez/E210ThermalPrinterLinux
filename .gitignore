@@ -5,12 +5,12 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 
-# Ambiente local
+# Local environment
 .env
 .env.*
 !.env.example
 .DS_Store
 *~
 
-# Capturas locais; publicar apenas amostras revisadas
+# Local captures; publish only reviewed samples
 /captures/

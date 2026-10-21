@@ -1,144 +1,144 @@
-# Diagnóstico Bluetooth com BlueZ
+# Bluetooth Diagnostics with BlueZ
 
-## Comportamento atual validado
+## Current Validated Behavior
 
-A sequência atual de cada cópia é `configuração → raster → 1B 69 → 1B 4A 00`, sem pausas artificiais por padrão e sem espera adicional de finalização. Essa ordem é usada para todos os tipos de mídia; o comando `1C 25 n` continua distinguindo contínuo, intervalo e marca preta. O avanço em etiquetas com sensor precisa ser reconfirmado após essa alteração. As seções abaixo preservam o histórico da investigação, incluindo a ordem inicial extraída do Java que foi substituída após os testes físicos.
+The current sequence for each copy is `configuration → raster → 1B 69 → 1B 4A 00`, without artificial pauses by default and without additional wait before completion. This ordering applies to all media types; command `1C 25 n` continues to distinguish between continuous, gap, and black-mark media. Feed behavior on sensor-equipped labels should be reconfirmed after this change. The sections below preserve the investigation history, including the initial sequence extracted from Java that was superseded after physical testing.
 
-Teste decisivo em papel contínuo: vinte escadas consecutivas de vinte degraus (400 degraus de 1 mm no total), 87.160 bytes, enviadas sem pausas com os comandos finais invertidos em relação ao APK. O usuário confirmou todas completas e coladas. Houve pausas durante a execução, sem perda de conteúdo observada. Isso valida esse fluxo, mas não mede o buffer interno, pois o transporte pode controlar a entrega enquanto a impressora processa.
+Decisive test on continuous media: twenty consecutive staircases of twenty steps (400 steps of 1 mm total), 87,160 bytes, transmitted without artificial pauses with the final two commands inverted relative to the APK. The user confirmed all were complete and seamlessly joined. Mechanism pauses occurred during execution, with no observed data loss. This validates this workflow, but does not measure the internal buffer capacity, as transport flow control can throttle delivery while the printer processes data.
 
-Antes disso, a escada sem comandos finais expôs somente até o início do 15º degrau. Enviar `1B 4A 00` isolado avançou o papel, e enviar `1B 69` depois fez imprimir o restante. Duas escadas terminadas somente com `1B 69` saíram coladas, mas com quinze degraus cada; com `1B 69` seguido de `1B 4A 00`, ambas tiveram vinte degraus. A semântica completa de cada comando ainda não foi determinada. Uma escada isolada terminou com avanço; a hipótese de posicionamento para destaque ao ficar ociosa é compatível com a observação, mas não foi confirmada como regra do firmware.
+Prior to that, printing the staircase pattern without final commands exposed only up to the start of step 15. Sending `1B 4A 00` alone advanced the paper, and subsequently sending `1B 69` printed the remainder. Two staircases terminated only with `1B 69` were printed joined, but with fifteen steps each; with `1B 69` followed by `1B 4A 00`, both had twenty full steps. The full semantics of each command remain to be formally established. An isolated staircase finished with a paper feed; the hypothesis that the printer feeds to tear-off position when entering idle is consistent with observations, but is not confirmed as a firmware rule.
 
-Logs locais: `captures/print-staircase-no-final.jsonl`, `captures/staircase-final-command-1b4a00.jsonl`, `captures/staircase-final-command-1b69.jsonl`, `captures/print-two-staircases-no-feed.jsonl`, `captures/print-two-staircases-reversed-final.jsonl`, `captures/print-staircase-separated-first.jsonl` e `captures/print-20-staircases-continuous.jsonl`.
+Local logs: `captures/print-staircase-no-final.jsonl`, `captures/staircase-final-command-1b4a00.jsonl`, `captures/staircase-final-command-1b69.jsonl`, `captures/print-two-staircases-no-feed.jsonl`, `captures/print-two-staircases-reversed-final.jsonl`, `captures/print-staircase-separated-first.jsonl`, and `captures/print-20-staircases-continuous.jsonl`.
 
-Usamos as APIs D-Bus `Adapter1`, `ProfileManager1`, `Profile1` e `Device1.ConnectProfile`, sem `sdptool` ou `rfcomm` da coleção de ferramentas descontinuadas.
+We use the standard BlueZ D-Bus APIs `Adapter1`, `ProfileManager1`, `Profile1`, and `Device1.ConnectProfile`, without deprecated tools like `sdptool` or `rfcomm`.
 
-O cliente registra um perfil serial de saída com UUID `00001101-0000-1000-8000-00805f9b34fb`. O BlueZ descobre o serviço remoto e entrega um descritor de socket pelo callback `Profile1.NewConnection`. Assim não é preciso escolher um canal RFCOMM manualmente.
+The client registers an outbound serial profile with UUID `00001101-0000-1000-8000-00805f9b34fb`. BlueZ discovers the remote service and delivers a connected socket file descriptor via the `Profile1.NewConnection` callback. This eliminates the need to configure or select an RFCOMM channel manually.
 
-Documentação oficial:
+Official documentation:
 
 - https://bluez.readthedocs.io/en/latest/profile-api/
 - https://bluez.readthedocs.io/en/latest/device-api/
 
-## Dependências nativas
+## Native Dependencies
 
-No CachyOS/Arch: BlueZ ativo, Python, `python-dbus` e `python-gobject`. Os bindings Python já estavam disponíveis no ambiente do primeiro teste. Caso faltem, solicitar ao usuário a instalação pelos repositórios.
+On CachyOS/Arch: active BlueZ service, Python, `python-dbus`, and `python-gobject`. The Python bindings were already present in the initial test environment. If missing, install them through system package managers.
 
-## Uso
+## Usage
 
-Ligar a E210 e encerrar conexões de outros dispositivos. Obter o endereço Bluetooth por descoberta, por exemplo com `bluetoothctl`. Não é necessário colocar o computador em modo visível.
+Power on the E210 and terminate any existing connections from other devices. Obtain the printer's Bluetooth address via discovery, for instance using `bluetoothctl`. Making the host computer discoverable is not required.
 
-Somente conectar:
-
-```bash
-python tools/probe_bluez.py ENDERECO_BLUETOOTH
-```
-
-Conectar e enviar a consulta de configurações encontrada no aplicativo:
+Connect only:
 
 ```bash
-python tools/probe_bluez.py ENDERECO_BLUETOOTH --query --timeout 25
+python tools/probe_bluez.py BLUETOOTH_ADDRESS
 ```
 
-Outras consultas identificadas no helper Java:
+Connect and send the settings query identified in the app:
 
 ```bash
-python tools/probe_bluez.py ENDERECO_BLUETOOTH --query status --timeout 20
-python tools/probe_bluez.py ENDERECO_BLUETOOTH --query model --timeout 20
+python tools/probe_bluez.py BLUETOOTH_ADDRESS --query --timeout 25
 ```
 
-`--query` sem valor continua selecionando `settings`. As únicas opções de consulta são `settings`, `status` e `model`; não há entrada livre de comandos. A ferramenta registra bytes brutos: receber bytes não significa que a resposta esteja completa ou semanticamente válida.
+Other queries identified in the Java helper:
 
-O prazo inclui descoberta, conexão e recepção. A saída é JSON por evento. Os modos de consulta não enviam impressão; a impressão exige `--print-test`. O cliente não altera a propriedade `Trusted`. Ao terminar, fecha o socket, encerra sua sessão de descoberta e remove o perfil temporário. O retorno é diferente de zero se a conexão falhar ou se uma consulta terminar sem resposta.
+```bash
+python tools/probe_bluez.py BLUETOOTH_ADDRESS --query status --timeout 20
+python tools/probe_bluez.py BLUETOOTH_ADDRESS --query model --timeout 20
+```
 
-## Primeiro teste físico — 2026-10-20
+`--query` without a value defaults to `settings`. The supported query options are `settings`, `status`, and `model`; arbitrary command injection is not supported. The tool logs raw bytes: receiving bytes does not necessarily mean the response is complete or semantically valid.
 
-- Impressora descoberta pelo nome `E210`.
-- Serviço Serial Port anunciado, com o UUID esperado pelo Java.
-- BlueZ 5.87; bindings `dbus` e `gi` já instalados.
-- Registro do perfil cliente e conexão D-Bus bem-sucedidos.
-- O socket recebido informou canal remoto RFCOMM **1** nesta unidade.
-- Consulta `1B 5E` enviada após 300 ms da conexão.
-- Nenhum byte recebido até o fim do prazo total de 25 segundos.
-- Nenhum comando de impressão enviado.
+The timeout spans discovery, connection, and reception. Output is formatted as JSON per event. Query modes do not print; printing requires `--print-test`. The client does not modify the `Trusted` property. Upon completion, it closes the socket, stops discovery, and unregisters the temporary profile. The exit code is non-zero if connection fails or if a query finishes without a response.
 
-O endereço da unidade fica fora desta documentação pública. O canal observado não deve ser fixado como constante para todas as unidades: o BlueZ deve continuar descobrindo o serviço.
+## First Physical Test — 2026-10-20
 
-O resultado confirma a conexão serial, mas não confirma uma troca completa do protocolo. Próximos experimentos: verificar consultas de status/modelo presentes no helper e comparar com uma sessão real do Qlabel, mantendo os bytes brutos e tempos de cada teste.
+- Printer discovered under name `E210`.
+- Serial Port service advertised with the UUID expected by Java code.
+- BlueZ 5.87; `dbus` and `gi` bindings already installed.
+- Client profile registration and D-Bus connection succeeded.
+- Received socket indicated remote RFCOMM channel **1** on this unit.
+- Query `1B 5E` sent 300 ms after connection established.
+- Zero bytes received before the 25-second overall timeout expired.
+- No print commands were sent.
 
-## Consultas de status e modelo — 2026-10-20
+The specific hardware unit address is omitted from public documentation. The observed RFCOMM channel should not be hardcoded as constant for all units; BlueZ dynamic service discovery should always be used.
 
-Cada consulta foi realizada em uma conexão própria, via Profile1, no canal resolvido pelo BlueZ. Prazo total de 20 segundos por execução. Nenhum comando de impressão foi enviado.
+The test confirmed serial connectivity, but did not confirm a full protocol handshake. Next steps: test status and model queries present in the helper and compare against real QLabel traffic, capturing raw bytes and timestamps.
 
-| Consulta | Enviado | Recebido, concatenado até o fim do teste | Resultado |
+## Status and Model Queries — 2026-10-20
+
+Each query was conducted over its own connection via Profile1 on the channel resolved by BlueZ. Overall timeout was 20 seconds per run. No print commands were sent.
+
+| Query | Sent | Received, concatenated through end of test | Result |
 | --- | --- | --- | --- |
-| Status | `1B 06` | `1B 06 00 03` | Comunicação bidirecional confirmada |
-| Modelo | `1B 18` | `1B 18` | Apenas o prefixo; identificação do modelo não obtida |
+| Status | `1B 06` | `1B 06 00 03` | Bidirectional communication confirmed |
+| Model | `1B 18` | `1B 18` | Prefix only; model identification not received |
 
-O helper `getPrintStatus` lê o byte de índice 2, que nessa resposta é `00`. Não atribuímos significado ao byte adicional `03` nem declaramos a impressora pronta: faltam testes controlados para associar os campos às condições físicas.
+The `getPrintStatus` helper reads byte index 2, which is `00` in this response. We do not assign semantics to the trailing `03` byte nor declare the printer ready: controlled tests associating fields with physical states are still required.
 
-O método Java `getRDPrinterModel` espera um byte de comprimento após `1B 18`, seguido do nome. Esse campo não chegou. Portanto, a resposta à consulta de modelo não atende ao formato esperado por esse método do aplicativo. Não assumir que os comandos genéricos do SDK são todos suportados pelo firmware da E210.
+The Java method `getRDPrinterModel` expects a length byte following `1B 18`, followed by the device name. That field was never received. Therefore, the model response does not conform to the structure expected by that app method. Do not assume all generic SDK commands are supported by the E210 firmware.
 
-Logs locais ignorados pelo Git: `captures/probe-status.jsonl` e `captures/probe-model.jsonl`.
+Local logs ignored by Git: `captures/probe-status.jsonl` and `captures/probe-model.jsonl`.
 
-Próximo marco: preparar uma etiqueta raster simples conforme a sequência encontrada no Java, definir as dimensões a partir da mídia instalada e validar uma impressão física.
+Next milestone: prepare a basic raster label following the sequence found in Java, derive dimensions from installed media, and validate physical printing.
 
-## Primeiro envio raster — papel contínuo de 50 mm
+## First Raster Transmission — 50 mm Continuous Media
 
-O usuário informou mídia contínua com largura de 50 mm. Foi preparada uma única impressão com comprimento lógico de 20 mm, densidade 6, deslocamentos zero e papel tipo 0. O raster segue o cálculo Java para 50 x 20 mm: 384 x 152 pixels, aproximadamente 48 x 19 mm na escala de 8 pixels/mm usada pelo aplicativo.
+The user indicated 50 mm wide continuous media. A single print job was prepared with nominal length of 20 mm, density 6, zero offsets, and paper type 0. The raster adheres to the Java formula for 50 x 20 mm: 384 x 152 pixels, approximately 48 x 19 mm at the 8 dots/mm scale used by the app.
 
-O padrão contém moldura, quadrado no canto e três barras de alturas diferentes. `tools/e210_raster.py` gera o raster e a sequência de comandos sem dependências adicionais. Os testes `tests/test_raster.py` verificam vetores de linha derivados do Java e decodificam o pacote completo para compará-lo ao raster original.
+The pattern consists of a border, a corner square, and three bars of varying heights. `tools/e210_raster.py` generates the raster and command sequence with no third-party dependencies. Tests in `tests/test_raster.py` verify row vectors derived from Java and decode the complete packet back to the original raster.
 
 ```bash
 python -m unittest discover -s tests -v
-python tools/probe_bluez.py ENDERECO_BLUETOOTH --print-test --timeout 25
+python tools/probe_bluez.py BLUETOOTH_ADDRESS --print-test --timeout 25
 ```
 
-O segundo comando imprime uma vez; não executar novamente sem necessidade. O retorno de sucesso indica envio completo ao socket, não confirmação física de impressão.
+The second command prints once; avoid running repeatedly without need. A successful exit code confirms complete transmission to the socket, not physical printing confirmation.
 
-Artefatos locais: `captures/test-50mm-continuous.pbm`, `captures/test-50mm-continuous.bin` e `captures/print-test-50mm.jsonl`. O primeiro envio transferiu 7.046 bytes ao socket. O usuário observou apenas alguns pontos em uma mesma linha, sem avanço perceptível do papel. **O teste de impressão falhou**, apesar do envio completo ao socket e dos testes do encoder passarem.
+Local artifacts: `captures/test-50mm-continuous.pbm`, `captures/test-50mm-continuous.bin`, and `captures/print-test-50mm.jsonl`. The initial transmission sent 7,046 bytes to the socket. The user observed only a few dots along a single line, with no perceptible paper feed. **The print test failed**, despite full socket transmission and passing encoder tests.
 
-Esse resultado ainda não distingue formato não aceito pelo firmware, comandos de configuração/avanço inadequados, ritmo de envio ou condição mecânica da mídia. Não foi identificada uma causa confirmada na revisão do Java. O programa de teste agrupa a sequência em um buffer, enquanto o aplicativo faz chamadas de escrita separadas para configuração, raster e avanço; isso é uma diferença a investigar, não uma causa demonstrada.
+This result did not distinguish between an unsupported firmware format, incorrect configuration/feed commands, transmission pacing issues, or mechanical media problems. No definitive root cause was found during Java review. The test script batched commands into a single buffer, whereas the mobile app issued distinct write calls for configuration, raster rows, and feeds; this was an area for investigation rather than a proven cause.
 
-## Isolamento do avanço
+## Feed Isolation
 
-Foi adicionado um modo que envia apenas `1B 4A 20`, equivalente a `PrinterHelper.setPrinterPageRun(32)`. O comando está no helper do APK, mas o método que aceita valor não foi encontrado em uso no caminho principal de impressão rastreado. Sua unidade física e seu comportamento na E210 ainda precisam de confirmação.
+A diagnostic mode was added to send only `1B 4A 20`, corresponding to `PrinterHelper.setPrinterPageRun(32)`. The command is present in the APK helper, although the parameter-taking overload was not observed in the primary print path. Its physical units and behavior on the E210 required confirmation.
 
 ```bash
-python tools/probe_bluez.py ENDERECO_BLUETOOTH --feed-test --timeout 15
+python tools/probe_bluez.py BLUETOOTH_ADDRESS --feed-test --timeout 15
 ```
 
-Esse teste não envia raster, não altera a configuração e não tenta reiniciar a impressora. Log local: `captures/feed-test-32.jsonl`. O usuário confirmou um pequeno avanço do papel: o comando foi aceito e houve movimento físico. A distância não foi medida.
+This test sends no raster data, does not alter configuration, and does not reset the printer. Local log: `captures/feed-test-32.jsonl`. The user confirmed a small paper feed: the command was accepted and physical paper movement occurred. Feed distance was not measured.
 
-## Mesmo raster com pausas de envio
+## Same Raster with Transmission Pauses
 
-Após confirmar o avanço isolado, foi repetido o padrão original com pausas de 20 ms entre comandos e linhas. O objetivo é investigar limitação de ritmo de recepção/processamento, sem alterar o conteúdo do trabalho. São os mesmos 7.046 bytes em 160 blocos: seis comandos de configuração, 152 linhas e dois comandos finais.
+After confirming isolated feed behavior, the original pattern was retransmitted with 20 ms pauses between commands and rows. The objective was to test for socket reception/processing rate limits without altering job content. The payload was the identical 7,046 bytes in 160 chunks: six configuration commands, 152 rows, and two final commands.
 
-O teste automatizado confirma que concatenar os blocos reproduz exatamente o pacote original. A separação de escritas não garante limites de pacotes no transporte RFCOMM: as pausas são o parâmetro experimental.
+Automated tests confirm that concatenating these chunks reproduces the original packet identically. Separate write calls do not guarantee packet boundaries over RFCOMM: pauses were the experimental variable.
 
 ```bash
-python tools/probe_bluez.py ENDERECO_BLUETOOTH --paced-print-test --timeout 25
+python tools/probe_bluez.py BLUETOOTH_ADDRESS --paced-print-test --timeout 25
 ```
 
-O envio foi completado ao socket. O usuário confirmou a impressão de moldura, quadrado e três barras de tamanhos progressivamente maiores, como previsto pelo raster. Esse é o primeiro teste de impressão física bem-sucedido. O resultado sustenta a hipótese de limitação de ritmo, sem determinar ainda a menor pausa confiável. Log local: `captures/print-test-paced.jsonl`.
+Socket transmission completed. The user confirmed printing of the border, square, and three bars of increasing heights, matching the generated raster. This was the first successful physical print. The result supports the pacing rate-limit hypothesis, without yet determining the minimum reliable pause. Local log: `captures/print-test-paced.jsonl`.
 
-## Impressão de PNG
+## PNG Printing
 
-`tools/print_png.py` prepara arquivos PNG por meio de `tools/png_job.py` e reutiliza a conexão BlueZ do diagnóstico. O padrão é raster de 384 pixels, proporção preservada, mídia contínua de 50 mm e densidade 6. Transparência é composta sobre branco, seguida de redimensionamento e conversão monocromática. Há opções de prévia, limiar e preparação sem impressão. Consulte o README para os comandos.
+`tools/print_png.py` processes PNG files via `tools/png_job.py` and reuses the BlueZ connection from diagnostics. Defaults are 384-pixel raster width, preserved aspect ratio, 50 mm continuous media, and density 6. Transparency is composited over white, followed by resizing and monochrome conversion. Options exist for preview, fixed thresholding, and dry-run preparation without printing. Refer to README for usage examples.
 
-O arquivo local `teste.png` foi enviado pela interface de PNG como raster de 384 × 384 pixels (48 × 48 mm), totalizando 11.713 bytes. O usuário confirmou que a impressão funcionou perfeitamente. O arquivo fornecido pelo usuário permanece local, fora deste commit. Log local: `captures/print-teste-png.jsonl`.
+The local file `teste.png` was transmitted via the PNG interface as a 384 × 384 pixel raster (48 × 48 mm), totaling 11,713 bytes. The user confirmed the print completed flawlessly. The user-provided file remains local and untracked. Local log: `captures/print-teste-png.jsonl`.
 
-## Etiquetas com intervalo e cópias
+## Gap Labels and Copies
 
-Revisão Java: `EditSetActivity.ZZClick.onClick` associa a seleção de intervalo a `paperType = 2`, marca preta a `3` e contínuo a `0`. `PrintActivity` monta listas de páginas/cópias, e `LPBTService.startToPrint` percorre essas páginas. Cada `printImage` configura o papel e termina com `1B 4A 00` e `1B 69` antes de passar à página seguinte.
+Java review: `EditSetActivity.ZZClick.onClick` maps label gap selection to `paperType = 2`, black mark to `3`, and continuous to `0`. `PrintActivity` builds page/copy lists, and `LPBTService.startToPrint` iterates over these pages. Each `printImage` configures paper type and concludes with `1B 4A 00` and `1B 69` before moving to the next page.
 
-A interface Python aceita `--media`, `--label-height` e `--copies`. A quantidade é implementada repetindo o trabalho completo. As dimensões do papel são separadas das dimensões do raster: uma imagem de 48 × 48 mm pode usar uma etiqueta lógica de 50 × 50 mm.
+The Python CLI accepts `--media`, `--label-height`, and `--copies`. Multiple copies are produced by repeating the full print job. Paper dimensions are kept distinct from raster dimensions: a 48 × 48 mm image can target a 50 × 50 mm logical label.
 
-Após o usuário trocar a mídia, foi solicitado um teste de três cópias. A mídia foi assumida como etiquetas de 50 × 50 mm com intervalo, pois as dimensões e o sensor ainda não foram medidos. Trabalho: `teste.png`, raster 384 × 384, `1C 25 02`, dimensões lógicas 500/500 em décimos de mm, três páginas, 35.139 bytes. Log local: `captures/print-gap-three-copies.jsonl`. A quantidade física e o alinhamento aguardam confirmação do usuário.
+After the user changed media, a three-copy test was requested. The media was assumed to be 50 × 50 mm gap labels, as dimensions and sensor calibration had not yet been measured. Job: `teste.png`, 384 × 384 raster, `1C 25 02`, logical dimensions 500/500 in tenths of a mm, three pages, 35,139 bytes. Local log: `captures/print-gap-three-copies.jsonl`. Physical count and alignment remain subject to user confirmation.
 
-## Comparação de ritmo em bloco preto
+## Pacing Comparison on Solid Black Block
 
-Em papel contínuo, foi impresso um bloco inteiramente preto de 384 × 400 pixels (48 × 50 mm), com densidade 10. Com pausas de 20 ms, o usuário observou boa impressão na primeira metade e trancos do motor na segunda. Foi enviado depois o mesmo bloco com pausas de 50 ms, mas não houve avaliação física explícita desse resultado antes do experimento seguinte.
+On continuous paper, a fully black block of 384 × 400 pixels (48 × 50 mm) was printed at density 10. With 20 ms pauses, the user noted good print quality on the first half followed by motor stuttering on the second half. The same block was then sent with 50 ms pauses, but no explicit physical assessment occurred before the next test.
 
-A pedido do usuário, o bloco foi enviado novamente com `--pause-ms 0`: os mesmos 21.230 bytes, em sequência e sem pausas artificiais. O usuário confirmou que **imprimiu melhor**. Isso demonstra melhora nesse teste sem pausas, mas não prova uma causa térmica, elétrica ou de buffering, nem estabelece que esse ritmo seja melhor para todas as imagens.
+At the user's request, the block was re-sent with `--pause-ms 0`: the same 21,230 bytes, sequentially without artificial delays. The user confirmed that it **printed better**. This demonstrates an improvement for this unpaused test, but does not prove a thermal, electrical, or buffering cause, nor does it establish that this pacing is optimal for all images.
 
-O resultado contrastou com o primeiro padrão geométrico, que falhou sem pausas e funcionou com 20 ms. A investigação posterior dos comandos finais substituiu essa configuração inicial pelo comportamento descrito no começo deste documento. Logs locais: `captures/print-black-48x50mm-density10.jsonl`, `captures/print-black-48x50mm-density10-pause50.jsonl` e `captures/print-black-48x50mm-density10-pause0.jsonl`.
+This finding contrasted with the initial geometric test pattern, which had failed without pauses and succeeded with 20 ms. The subsequent investigation into termination commands resolved the issue, superseding this initial setup with the behavior documented at the start of this file. Local logs: `captures/print-black-48x50mm-density10.jsonl`, `captures/print-black-48x50mm-density10-pause50.jsonl`, and `captures/print-black-48x50mm-density10-pause0.jsonl`.
