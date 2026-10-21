@@ -138,6 +138,7 @@ class USBTests(unittest.TestCase):
                     patch.dict('sys.modules', {'probe_bluez': None, 'dbus': None}), \
                     patch('sys.stdout', new_callable=io.StringIO):
                 self.assertEqual(main(), 0)
+                self.assertEqual(send.call_args.args[0][0], bytes.fromhex('1c210a'))
                 self.assertEqual(send.call_args.args[0][-2:], [b'\x1bi', b'\x1bJ\0'])
 
 

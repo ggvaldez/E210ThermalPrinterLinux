@@ -62,7 +62,7 @@ class CupsRasterTests(unittest.TestCase):
         self.assertTrue(opts['landscape'])
 
     def test_resolve_density(self):
-        self.assertEqual(resolve_density({}), 6)
+        self.assertEqual(resolve_density({}), 10)
         self.assertEqual(resolve_density({'darkness': '6'}), 6)
         self.assertEqual(resolve_density({'darkness': '8'}), 8)
         self.assertEqual(resolve_density({'darkness': 'Draft Light'}), 4)

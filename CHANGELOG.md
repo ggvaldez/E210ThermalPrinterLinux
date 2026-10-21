@@ -1,6 +1,19 @@
 # Changelog
 
-## v0.1.0 — 2026-10-21 (pre-release)
+## v0.2.0 — 2026-10-21
+
+- Use Atkinson dithering and density 10 by default in the PNG CLI and CUPS.
+- Add Bayer 4×4 ordered dithering as an option in the CLI and CUPS.
+- Share monochrome conversion between both print paths; retain explicit
+  Floyd–Steinberg and fixed-threshold options.
+- Reinstall CUPS files to load the new method; saved queue/application
+  options may need to be changed to Atkinson and darkness 10.
+
+Validation: 68 automated tests passed; the PPD validates without warnings.
+The conversion methods were compared locally on gap-label paper. Lower
+density values remain available for other papers.
+
+## v0.1.0 — 2026-10-21
 
 Initial experimental release for the E210 on Linux, using the protocol
 recovered from QLabel. No Android application or Windows driver is needed.

@@ -16,6 +16,10 @@ import sys
 from pathlib import Path
 from PIL import Image, ImageOps
 
+TOOLS_DIR = Path(__file__).resolve().parents[1] / 'tools'
+sys.path.insert(0, str(TOOLS_DIR if TOOLS_DIR.is_dir() else Path('/usr/share/e210/tools')))
+from monochrome import DEFAULT_DITHER, to_monochrome
+
 # Validated printable width: 48 mm = 384 dots (8 dots/mm).
 PRINTER_WIDTH_DOTS = 384
 DOTS_PER_MM = 8
@@ -55,10 +59,10 @@ def parse_cups_options(options_str):
 
 
 def resolve_density(opts):
-    """Determine thermal print density (default: 6, practical max: 10)."""
+    """Determine thermal print density (default: 10)."""
     val = opts.get('darkness') or opts.get('density')
     if val is None:
-        return 6
+        return 10
     if isinstance(val, str):
         val_lower = val.lower()
         if 'draft' in val_lower or 'light' in val_lower:
@@ -72,10 +76,10 @@ def resolve_density(opts):
         try:
             val = int(val)
         except ValueError:
-            return 6
+            return 10
     if isinstance(val, int):
         return max(0, min(16, val))
-    return 6
+    return 10
 
 
 def resolve_media_type(opts, page_size_name, header_media_type=""):
@@ -211,7 +215,7 @@ def read_cups_raster_stream(stream):
         cups.cupsRasterClose(raster)
 
 
-def convert_page_to_e210_chunks(page, density=6, media_type=0, dither='floydsteinberg',
+def convert_page_to_e210_chunks(page, density=10, media_type=0, dither=DEFAULT_DITHER,
                                 target_width=PRINTER_WIDTH_DOTS, scaling='fitcontent'):
     """Fit artwork to the head, or preserve CUPS physical scale when requested.
 
@@ -263,10 +267,7 @@ def convert_page_to_e210_chunks(page, density=6, media_type=0, dither='floydstei
                      f'media={media_type}\n')
 
     # Convert to 1-bit monochrome
-    if dither.lower() == 'threshold':
-        mono = full_page.point(lambda p: 255 if p >= 128 else 0, mode='1')
-    else:
-        mono = full_page.convert('1', dither=Image.Dither.FLOYDSTEINBERG)
+    mono = to_monochrome(full_page, dither)
 
     # Invert polarity: Pillow 1=white; E210 1=black
     raster = bytes(b ^ 255 for b in mono.tobytes())
@@ -312,7 +313,7 @@ def main():
 
     opts = parse_cups_options(options_str)
     density = resolve_density(opts)
-    dither = opts.get('dither', 'floydsteinberg')
+    dither = opts.get('dither', DEFAULT_DITHER)
 
     # Input file or stdin
     if len(sys.argv) >= 7 and sys.argv[6]:

@@ -6,6 +6,7 @@ import struct
 from PIL import Image, ImageOps
 
 from e210_raster import encode_rows
+from monochrome import DEFAULT_DITHER, to_monochrome
 
 
 WIDTH = 384
@@ -13,7 +14,8 @@ DOTS_PER_MM = 8
 MEDIA_TYPES = {'continuous': 0, 'gap': 2, 'black-mark': 3}
 
 
-def prepare_png(path, density=6, threshold=None, media='continuous', label_height_mm=None, copies=1):
+def prepare_png(path, density=10, threshold=None, media='continuous', label_height_mm=None, copies=1,
+                dither=DEFAULT_DITHER):
     if not 0 <= density <= 16:
         raise ValueError('Density must be between 0 and 16')
     if threshold is not None and not 0 <= threshold <= 255:
@@ -42,10 +44,7 @@ def prepare_png(path, density=6, threshold=None, media='continuous', label_heigh
         white = Image.new('RGBA', rgba.size, 'white')
         white.alpha_composite(rgba)
         gray = white.convert('L').resize((WIDTH, height), Image.Resampling.LANCZOS)
-        if threshold is None:
-            preview = gray.convert('1', dither=Image.Dither.FLOYDSTEINBERG)
-        else:
-            preview = gray.point(lambda p: 255 if p >= threshold else 0, mode='1')
+        preview = to_monochrome(gray, dither, threshold)
     # Pillow: white=1; E210 protocol: black=1.
     raster = bytes(value ^ 255 for value in preview.tobytes())
     encoded = encode_rows(raster, WIDTH, height)

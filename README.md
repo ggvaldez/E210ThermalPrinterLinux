@@ -141,7 +141,7 @@ Images are resized to **384 pixels wide**, preserving aspect ratio. This is the 
 
 For maximum sharpness and pixel-level control, prepare the PNG already at 384 pixels wide. A 384 × 384 pixel file produces an approximately 48 × 48 mm raster. PNG DPI metadata does not affect dimensions; height is calculated from the aspect ratio. Physical margins and feed distance may differ from raster size.
 
-Transparency is composited over white. Grayscale images are converted to black and white using Floyd–Steinberg dithering. Transmission occurs **without artificial pauses**, following Bluetooth socket readiness or USB transfer completion. Each copy ends with **`1B 69` followed by `1B 4A 00`**, ensuring printing completes before feeding. This ordering applies to all modes; media type is configured separately.
+Transparency is composited over white. Grayscale images are converted to black and white using **Atkinson dithering** by default, with **density 10**. These defaults were selected after local comparisons on gap-label paper; a lower density may suit other papers. Transmission occurs **without artificial pauses**, following Bluetooth socket readiness or USB transfer completion. Each copy ends with **`1B 69` followed by `1B 4A 00`**, ensuring printing completes before feeding. This ordering applies to all modes; media type is configured separately.
 
 ### Preview Without Printing
 
@@ -152,6 +152,28 @@ python tools/print_png.py image.png --dry-run --preview preview.png
 This prepares the image without connecting to the printer. The preview command will not overwrite existing files.
 
 ### Settings and Adjustments
+
+Atkinson is the default for both the PNG script and CUPS. To select the previous Floyd–Steinberg method explicitly:
+
+```bash
+python tools/print_png.py image.png --dither floydsteinberg --density 6
+lp -d E210 -o Dither=FloydSteinberg -o Darkness=6 document.pdf
+```
+
+`--dither` accepts `atkinson`, `floydsteinberg`, `bayer`, and `threshold`. An explicit
+`--threshold` overrides the dithering method. In CUPS, use **Dithering Method →
+Atkinson** and **Print Density → 10**. Reinstall the CUPS files after updating;
+existing queues or application presets can retain older explicit choices.
+Monochrome conversion is shared by the PNG CLI and raster filter.
+
+Bayer uses the same 4×4 ordered matrix as the local comparison tests:
+
+```bash
+python tools/print_png.py image.png --dither bayer
+lp -d E210 -o Dither=Bayer document.pdf
+```
+
+Atkinson and density 10 remain the defaults.
 
 To use a fixed black-and-white threshold instead of dithering:
 
@@ -165,7 +187,7 @@ To adjust thermal density or select another adapter:
 python tools/print_png.py image.png --address AA:BB:CC:DD:EE:FF --density 6 --adapter hci0
 ```
 
-`--density` accepts values from 0 to 16 (default: 6). `--threshold` accepts 0 to 255.
+`--density` accepts values from 0 to 16 (default: 10). `--threshold` accepts 0 to 255.
 
 To test slower transmission, use `--pause-ms 50`. The default is **0 ms**. The pause applies between commands and rows; the connection timeout scales to the estimated job duration. Changing pause does not alter pixels or configured thermal density.
 
@@ -219,7 +241,7 @@ does not select our backend. No TSPL or Windows driver is involved.
 
 ### Printing with CUPS
 
-Print a document or image using default settings (50 mm continuous roll, density 6):
+Print a document or image using default settings (50 mm continuous roll, Atkinson dithering, density 10):
 
 ```bash
 lp -d E210 document.pdf

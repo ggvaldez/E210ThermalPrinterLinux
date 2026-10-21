@@ -10,6 +10,7 @@ from PIL import UnidentifiedImageError
 
 from e210_discovery import discover_address, e210_candidates
 from png_job import DOTS_PER_MM, MEDIA_TYPES, prepare_png
+from monochrome import DEFAULT_DITHER, DITHER_METHODS
 
 
 def main():
@@ -20,8 +21,11 @@ def main():
     parser.add_argument('--usb-device', help='Select USB BUS:DEVICE; default: the only connected E210')
     parser.add_argument('--address', help='Bluetooth address; if omitted, automatically discovers the E210')
     parser.add_argument('--adapter', default='hci0')
-    parser.add_argument('--density', type=int, default=6, help='Thermal density from 0 to 16 (default: 6)')
-    parser.add_argument('--threshold', type=int, help='Threshold from 0 to 255; default: Floyd–Steinberg dithering')
+    parser.add_argument('--density', type=int, default=10, help='Thermal density from 0 to 16 (default: 10)')
+    parser.add_argument('--dither', choices=DITHER_METHODS, default=DEFAULT_DITHER,
+                        help='Monochrome conversion (default: atkinson)')
+    parser.add_argument('--threshold', type=int,
+                        help='Fixed threshold from 0 to 255; overrides --dither')
     parser.add_argument('--preview', help='Save converted raster to a PNG file')
     parser.add_argument('--dry-run', action='store_true', help='Prepare without connecting or printing')
     parser.add_argument('--copies', type=int, default=1, help='Number of copies (default: 1)')
@@ -52,7 +56,7 @@ def main():
         parser.error('Invalid Bluetooth address')
     try:
         chunks, preview = prepare_png(args.image, args.density, args.threshold,
-                                      args.media, args.label_height, args.copies)
+                                      args.media, args.label_height, args.copies, dither=args.dither)
         if args.preview:
             # Do not overwrite input image or an existing file.
             with open(args.preview, 'xb') as output:
