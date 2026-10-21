@@ -58,13 +58,26 @@ def discover_address(adapter_name='hci0', seconds=10):
         loop.quit()
         return False
 
+    def stop_when_found():
+        # Do not wait for the scan deadline once an unambiguous device is visible.
+        objects = manager.GetManagedObjects()
+        active_objects = {path: interfaces for path, interfaces in objects.items()
+                          if 'RSSI' in interfaces.get('org.bluez.Device1', {})
+                          or interfaces.get('org.bluez.Device1', {}).get('Connected', False)}
+        if len(e210_candidates(active_objects, adapter_path)) == 1:
+            loop.quit()
+            return False
+        return True
+
     print(f'Searching for E210 for {seconds} seconds on {adapter_name}...', flush=True)
     started = False
+    poll_timer = deadline_timer = None
     try:
         adapter.SetDiscoveryFilter({'Transport': 'bredr'})
         adapter.StartDiscovery()
         started = True
-        GLib.timeout_add_seconds(seconds, finish)
+        poll_timer = GLib.timeout_add(200, stop_when_found)
+        deadline_timer = GLib.timeout_add_seconds(seconds, finish)
         loop.run()
         managed_objects = manager.GetManagedObjects()
         candidates = e210_candidates(managed_objects, adapter_path)
@@ -78,6 +91,11 @@ def discover_address(adapter_name='hci0', seconds=10):
             if len(active) == 1:
                 candidates = active
     finally:
+        for timer in (poll_timer, deadline_timer):
+            if timer is not None:
+                source = GLib.MainContext.default().find_source_by_id(timer)
+                if source is not None:
+                    source.destroy()
         if started:
             adapter.StopDiscovery()
         bus.close()

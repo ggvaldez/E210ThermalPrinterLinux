@@ -1,14 +1,15 @@
 # E210 Thermal Printer Linux
 
-Python application to print PNG images on the Bluetooth **E210 thermal printer from Linux**, without relying on a smartphone or the QLabel app during printing.
+Python application to print PNG images on the **E210 thermal printer from Linux over Bluetooth or USB**, without relying on a smartphone or the QLabel app during printing.
 
-Printing has been physically validated on an E210 with **50 mm continuous paper**, using CachyOS and BlueZ. Both a geometric test pattern and PNG images sent from the command line printed successfully.
+Printing has been physically validated on an E210 with **50 mm continuous paper**, using CachyOS and BlueZ. Both a geometric test pattern and PNG images sent from the command line printed successfully. The same QLabel byte stream has also been physically validated over USB on the YICHIP `08c5:4001` interface.
 
 ## Requirements
 
-- Linux with active BlueZ service and a Bluetooth adapter supporting Classic Bluetooth/RFCOMM.
-- Python 3, Pillow, dbus-python, and PyGObject.
-- E210 turned on, loaded with 50 mm continuous paper, with no active connection to a smartphone.
+- Python 3 and Pillow on Linux.
+- USB: the system `libusb` library and a data-capable USB cable. No BlueZ, PyUSB or RFCOMM is required for USB printing.
+- Bluetooth: active BlueZ service, a Classic Bluetooth/RFCOMM adapter, dbus-python and PyGObject.
+- E210 turned on and loaded with paper; disconnect smartphone applications before printing over Bluetooth.
 
 Communication uses modern BlueZ D-Bus APIs. Installing `sdptool` or deprecated Bluetooth utilities is not required.
 
@@ -24,7 +25,7 @@ cd E210ThermalPrinterLinux
 On CachyOS or Arch Linux, install native dependencies:
 
 ```bash
-sudo pacman -S --needed bluez bluez-utils python python-pillow python-dbus python-gobject
+sudo pacman -S --needed libusb bluez bluez-utils python python-pillow python-dbus python-gobject
 sudo systemctl enable --now bluetooth.service
 ```
 
@@ -38,7 +39,7 @@ Without `--address`, the script first checks whether an E210 is already register
 python tools/print_png.py image.png
 ```
 
-Turn on the printer and disconnect it from your smartphone before running. The search uses Classic Bluetooth via BlueZ. If an E210 is found or already registered, it displays the address and prints; if none is found, it reports the issue. If more than one printer is found, it lists their addresses and asks you to specify one with `--address`. `--adapter hci1` allows choosing a different adapter. `--dry-run` skips discovery and Bluetooth connection.
+Turn on the printer and disconnect it from your smartphone before running. The search uses Classic Bluetooth via BlueZ. If an E210 is found or already registered, it displays the address and prints; if none is found, it reports the issue. If more than one printer is found, it lists their addresses and asks you to specify one with `--address`. `--adapter hci1` allows choosing a different adapter. `--dry-run` skips discovery and connections for either transport.
 
 ### Discovering the Address Manually
 
@@ -80,6 +81,52 @@ python tools/print_png.py image.png --address AA:BB:CC:DD:EE:FF
 
 Each run prints **one copy** by default. Paths containing spaces must be enclosed in quotes.
 
+### Printing over USB
+
+Connect the printer with a USB data cable and run:
+
+```bash
+python tools/print_png.py image.png --transport usb
+```
+
+The program automatically selects the only connected device with VID/PID
+`08c5:4001` (reported as `YICHIP YC3121 Printer demo` on the tested unit).
+It opens interface 0 and writes to bulk OUT endpoint `0x01` using native
+libusb. It does not require `/dev/usb/lp0` or an RFCOMM device.
+
+When multiple printers are connected, select the bus/device shown by
+`lsusb -d 08c5:4001`:
+
+```bash
+python tools/print_png.py image.png --transport usb --usb-device 001:028
+```
+
+The integrated command was physically validated with `teste.png`: automatic
+USB selection, a 384 × 384 dot raster (48 × 48 mm), density 6, continuous
+media, one copy and 11,713 transferred bytes. The user confirmed correct
+output. CUPS USB uses this transport, but an end-to-end print from the
+installed CUPS queue has not yet been confirmed.
+
+Bus/device numbers can change after reconnecting; automatic selection avoids
+storing those numbers. The generic YICHIP ID alone is not proof that another
+printer model supports this protocol. `--address` and `--adapter` apply only
+to Bluetooth, which remains the default transport.
+
+Density, copies, media, previews and optional pacing work identically with
+both connections. For example:
+
+```bash
+python tools/print_png.py image.png --transport usb --media gap --label-height 50 --copies 3
+```
+
+If USB access is denied, inspect `/dev/bus/usb/BUS/DEVICE` permissions. On the
+tested system, the device is owned by group `lp`; local permissions/group
+membership must permit read/write access. CUPS runs this project's backend
+as root. libusb temporarily detaches a bound kernel printer driver when
+necessary and reattaches it on release. Close competing print jobs/apps
+before using the same interface. Failed jobs are not resent by the USB
+sender; after resolving the error, submit the job again.
+
 ### Gap Labels and Multiple Copies
 
 To print three copies on 50 × 50 mm labels with gaps:
@@ -94,7 +141,7 @@ Images are resized to **384 pixels wide**, preserving aspect ratio. This is the 
 
 For maximum sharpness and pixel-level control, prepare the PNG already at 384 pixels wide. A 384 × 384 pixel file produces an approximately 48 × 48 mm raster. PNG DPI metadata does not affect dimensions; height is calculated from the aspect ratio. Physical margins and feed distance may differ from raster size.
 
-Transparency is composited over white. Grayscale images are converted to black and white using Floyd–Steinberg dithering. Transmission occurs **without artificial pauses**, following Bluetooth socket readiness. Each copy ends with **`1B 69` followed by `1B 4A 00`**, ensuring printing completes before feeding. This ordering applies to all modes; media type is configured separately.
+Transparency is composited over white. Grayscale images are converted to black and white using Floyd–Steinberg dithering. Transmission occurs **without artificial pauses**, following Bluetooth socket readiness or USB transfer completion. Each copy ends with **`1B 69` followed by `1B 4A 00`**, ensuring printing completes before feeding. This ordering applies to all modes; media type is configured separately.
 
 ### Preview Without Printing
 
@@ -138,6 +185,8 @@ You can integrate the E210 with CUPS to use it as a native system printer from b
 
 ### Installing CUPS Driver
 
+Run the following command in an interactive terminal (for example Konsole), where `sudo` can ask for your password. A non-interactive command runner cannot read the password.
+
 Run the installer with root privileges:
 
 ```bash
@@ -147,8 +196,26 @@ sudo ./tools/install_cups.sh
 This installs:
 - PPD definition: `/usr/share/cups/model/e210.ppd`
 - CUPS raster filter: `/usr/lib/cups/filter/rastertoe210`
-- CUPS Bluetooth backend: `/usr/lib/cups/backend/e210`
-- Configures and enables printer queue `E210` pointing to `e210://auto`.
+- CUPS Bluetooth/USB backend: `/usr/lib/cups/backend/e210`
+- Configures and enables printer queue `E210`. A new installation defaults to Bluetooth (`e210://auto`); updates preserve its existing connection.
+
+To install or switch the queue to USB:
+
+```bash
+sudo ./tools/install_cups.sh --usb
+```
+
+To switch back to Bluetooth, use `--bluetooth`. USB uses `e210://usb` to
+select the only connected matching printer. For multiple printers, set an
+explicit URI, noting that device numbers change on reconnect:
+
+```bash
+sudo lpadmin -p E210 -v e210://usb/001/028
+```
+
+The custom `e210://usb` backend sends the same filtered QLabel commands as
+Bluetooth. Do not select CUPS' generic `usb://` connection for this setup; it
+does not select our backend. No TSPL or Windows driver is involved.
 
 ### Printing with CUPS
 
@@ -161,15 +228,40 @@ lp -d E210 document.pdf
 Print to die-cut gap labels (e.g., 50 × 50 mm) with increased darkness:
 
 ```bash
-lp -d E210 -o media=Label50x50mm -o Darkness=8 label.pdf
+lp -d E210 -o PageSize=50x50mm -o MediaType=Gap -o Darkness=8 label.pdf
 ```
 
 Supported media sizes in the PPD:
-- `Continuous50mm` (Default)
-- `Label50x80mm`, `Label50x70mm`, `Label50x50mm`, `Label50x30mm`
-- `Label40x60mm`, `Label40x30mm`
-- `Label30x30mm`, `Label30x20mm`
-- `CableWrap` (38 × 25 mm tag)
+- `50x100mm` (Default)
+- `50x80mm`, `50x70mm`, `50x50mm`, `30x50mmRotated`
+- `40x60mm`, `30x40mmRotated`
+- `30x30mm`, `20x30mmRotated`
+- `25x38mmRotated` (38 × 25 mm tag)
+
+Page-size identifiers use Adobe/CUPS standard names and exact millimeter-to-point dimensions. A `Rotated` suffix preserves a wider-than-tall physical label, for example `30x50mmRotated` means 50 mm wide × 30 mm high. These identifiers replace the earlier `Continuous50mm`, `Label…`, and `CableWrap` names; reselect the size in saved application print settings after reinstalling. Roll type remains a separate `MediaType` setting.
+
+### Image sizing in GIMP and other applications
+
+The driver defaults to **Image Sizing → Fit Artwork to Label** (`E210Scaling=FitContent`). It removes blank document margins and fits the artwork proportionally within **both** the printable width (up to 384 pixels / 48 mm) **and the selected page height**. This also applies to continuous paper: a 50 × 50 mm page cannot grow taller than 50 mm when an image has large lateral white borders. Narrower artwork stays narrower when the page height is the limiting dimension.
+
+On continuous paper, unused vertical page padding is removed after fitting. On sensor labels, the full physical page height is preserved so the next label can be positioned. Use **Media Type → Continuous Paper** for a continuous roll, including when **Media Size → 50 × 50 mm** is selected. Use die-cut/gap mode only with actual gaps between labels. Page size limits the layout; media type controls paper positioning. A short physical presentation feed may still occur when the printer becomes idle.
+
+Artwork narrower than the 48 mm head is **right-aligned**, matching the printer's paper guide, rather than centered. Narrow document pages in **Preserve Document Size** mode are also positioned against the right edge; their internal layout is preserved. This applies to continuous, gap and black-mark media.
+
+For example, a 384-pixel PNG tagged as 300 dpi is only 32.5 mm wide in GIMP at its original physical scale. The direct PNG script instead uses 48 mm. The content-fitting option avoids that discrepancy without modifying the source image's DPI metadata.
+
+To preserve a document's physical scale instead, select **Image Sizing → Preserve Document Size** (`E210Scaling=ActualSize`). Content outside the 48 mm head is clipped rather than shrinking the entire physical page. Continuous paper still removes empty leading/trailing rows; use fixed label media when the full page length matters.
+
+```bash
+lp -d E210 -o MediaType=Continuous -o E210Scaling=FitContent image.pdf
+lp -d E210 -o PageSize=50x50mm -o MediaType=Gap -o E210Scaling=FitContent label.pdf
+```
+
+Choose the **page size** and **media type** separately: selecting a 50 × 50 mm page does not itself mean the roll has gaps. The filter honors the media type in the raster header and decodes compressed CUPS/PWG raster through the installed `libcups` library.
+
+After updating the driver, run `sudo ./tools/install_cups.sh` again and reopen GIMP's print dialog so it reloads the PPD and its Image Sizing choices. The installer replaces the filter and updates the existing E210 queue.
+
+Bluetooth discovery uses a known E210 address immediately, or stops scanning as soon as a single active E210 is detected rather than waiting for the full scan timeout. Connection to an already known address skips inquiry. The connection timeout is an upper limit for failures, not a mandatory delay before printing.
 
 To uninstall the CUPS driver and remove the queue:
 

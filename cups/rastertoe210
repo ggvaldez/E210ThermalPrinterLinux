@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""CUPS raster filter for the E210 Bluetooth thermal printer.
+"""CUPS raster filter for the E210 thermal printer.
 
 Converts application/vnd.cups-raster or image/pwg-raster into E210 binary commands.
 Usage by CUPS scheduler:
     rastertoe210 <job-id> <user> <title> <copies> <options> [<filename>]
 """
 
+import ctypes
+import ctypes.util
 import math
 import os
 import shlex
@@ -14,7 +16,7 @@ import sys
 from pathlib import Path
 from PIL import Image, ImageOps
 
-# Maximum physical printable width is 48 mm = 384 dots @ 203 DPI (8 dots/mm)
+# Validated printable width: 48 mm = 384 dots (8 dots/mm).
 PRINTER_WIDTH_DOTS = 384
 DOTS_PER_MM = 8
 
@@ -76,8 +78,10 @@ def resolve_density(opts):
     return 6
 
 
-def resolve_media_type(opts, page_size_name):
+def resolve_media_type(opts, page_size_name, header_media_type=""):
     """Resolve media type code: continuous=0, gap=2, black-mark=3."""
+    if not opts.get("mediatype") and header_media_type:
+        opts = dict(opts, mediatype=header_media_type)
     m = opts.get('mediatype') or opts.get('media')
     if m:
         m_lower = str(m).lower()
@@ -99,7 +103,8 @@ def resolve_media_type(opts, page_size_name):
 class CupsRasterPage:
     """Represents a single parsed page from a CUPS raster stream."""
 
-    def __init__(self, width, height, bpp, bytes_per_line, colorspace, endian, data, page_name):
+    def __init__(self, width, height, bpp, bytes_per_line, colorspace, endian, data, page_name,
+                 resolution=(203.2, 203.2), page_size=(0, 0), media_type=""):
         self.width = width
         self.height = height
         self.bpp = bpp
@@ -108,6 +113,9 @@ class CupsRasterPage:
         self.endian = endian
         self.data = data
         self.page_name = page_name
+        self.resolution = resolution
+        self.page_size = page_size
+        self.media_type = media_type
 
     def to_pil_image(self):
         """Convert page raster data into a PIL Grayscale image ('L')."""
@@ -136,84 +144,123 @@ class CupsRasterPage:
 
 
 def read_cups_raster_stream(stream):
-    """Generator reading all pages from a CUPS or PWG raster stream."""
-    magic = stream.read(4)
-    if not magic or len(magic) < 4:
-        return
+    """Use libcups to decode compressed v2/PWG and uncompressed v1/v3 safely."""
+    library = ctypes.util.find_library('cups')
+    if not library:
+        raise ValueError('libcups is required to decode CUPS/PWG Raster')
+    cups = ctypes.CDLL(library)
+    callback_type = ctypes.CFUNCTYPE(ctypes.c_ssize_t, ctypes.c_void_p,
+                                    ctypes.POINTER(ctypes.c_ubyte), ctypes.c_size_t)
+    errors = []
 
-    # Check magic synchronization string
-    if magic in (b'RaSt', b'RaS2', b'RaS3'):
-        endian = '>'
-    elif magic in (b'tSaR', b'2SaR', b'3SaR'):
-        endian = '<'
-    else:
-        raise ValueError(f'Invalid CUPS raster magic: {magic!r}')
+    @callback_type
+    def read_data(context, buffer, length):
+        try:
+            data = stream.read(length)
+            ctypes.memmove(buffer, data, len(data))
+            return len(data)
+        except Exception as exc:
+            errors.append(exc)
+            return -1
 
-    # Version 2 header is 1796 bytes; Version 1 is 432 bytes
-    is_v2 = magic in (b'RaS2', b'RaS3', b'2SaR', b'3SaR')
-    header_size = 1796 if is_v2 else 432
-
-    while True:
-        header_bytes = stream.read(header_size)
-        if not header_bytes:
-            break
-        if len(header_bytes) < header_size:
-            break
-
-        # Header offsets (constant across v1 and v2 for essential fields):
-        # cupsWidth at offset 372
-        # cupsHeight at offset 376
-        # cupsBitsPerPixel at offset 388
-        # cupsBytesPerLine at offset 392
-        # cupsColorSpace at offset 400
-        cups_width = struct.unpack_from(endian + 'I', header_bytes, 372)[0]
-        cups_height = struct.unpack_from(endian + 'I', header_bytes, 376)[0]
-        cups_bpp = struct.unpack_from(endian + 'I', header_bytes, 388)[0]
-        cups_bytes_per_line = struct.unpack_from(endian + 'I', header_bytes, 392)[0]
-        cups_cspace = struct.unpack_from(endian + 'I', header_bytes, 400)[0]
-
-        page_name = ''
-        if is_v2:
-            # cupsPageSizeName at offset 1732 (64 bytes string)
-            name_bytes = header_bytes[1732:1796].split(b'\0', 1)[0]
-            page_name = name_bytes.decode('latin1', 'replace')
-
-        data_size = cups_bytes_per_line * cups_height
-        data = stream.read(data_size)
-        if len(data) < data_size:
-            break
-
-        yield CupsRasterPage(cups_width, cups_height, cups_bpp, cups_bytes_per_line,
-                             cups_cspace, endian, data, page_name)
+    cups.cupsRasterOpenIO.argtypes = [callback_type, ctypes.c_void_p, ctypes.c_int]
+    cups.cupsRasterOpenIO.restype = ctypes.c_void_p
+    cups.cupsRasterReadHeader2.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+    cups.cupsRasterReadHeader2.restype = ctypes.c_uint
+    cups.cupsRasterReadPixels.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_uint]
+    cups.cupsRasterReadPixels.restype = ctypes.c_uint
+    cups.cupsRasterClose.argtypes = [ctypes.c_void_p]
+    cups.cupsRasterErrorString.restype = ctypes.c_char_p
+    raster = cups.cupsRasterOpenIO(read_data, None, 0)
+    if not raster:
+        message = cups.cupsRasterErrorString()
+        raise ValueError(message.decode(errors='replace') if message else 'Invalid raster stream')
+    # cups_page_header2_t has a fixed 1796-byte ABI. libcups returns host byte order.
+    try:
+        while True:
+            header = ctypes.create_string_buffer(1796)
+            if not cups.cupsRasterReadHeader2(raster, header):
+                if errors:
+                    raise ValueError(f'Unable to read raster: {errors[0]}')
+                message = cups.cupsRasterErrorString()
+                if message:
+                    raise ValueError(message.decode(errors='replace'))
+                break
+            raw = header.raw
+            width, height = struct.unpack_from('=II', raw, 372)
+            bpp, stride, order, space = struct.unpack_from('=IIII', raw, 388)
+            if not width or not height or bpp not in (1, 8, 24, 32) or order != 0:
+                raise ValueError('Unsupported raster dimensions, bit depth or planar color order')
+            if stride < (width * bpp + 7) // 8 or stride * height > 256 * 1024 * 1024:
+                raise ValueError('Invalid or oversized raster page')
+            data = bytearray()
+            row = ctypes.create_string_buffer(stride)
+            for _ in range(height):
+                if cups.cupsRasterReadPixels(raster, row, stride) != stride:
+                    raise ValueError('Truncated raster pixel data')
+                data.extend(row.raw)
+            resolution = struct.unpack_from('=II', raw, 276)
+            page_size = struct.unpack_from('=ff', raw, 428)
+            if not all(page_size):
+                page_size = struct.unpack_from('=II', raw, 352)
+            name = raw[1732:1796].split(b'\0', 1)[0].decode('latin1')
+            media_type = raw[128:192].split(b'\0', 1)[0].decode('latin1')
+            yield CupsRasterPage(width, height, bpp, stride, space, '=', bytes(data), name,
+                                 resolution, page_size, media_type)
+    finally:
+        cups.cupsRasterClose(raster)
 
 
 def convert_page_to_e210_chunks(page, density=6, media_type=0, dither='floydsteinberg',
-                                target_width=PRINTER_WIDTH_DOTS):
-    """Convert a CupsRasterPage into a list of E210 command chunks."""
+                                target_width=PRINTER_WIDTH_DOTS, scaling='fitcontent'):
+    """Fit artwork to the head, or preserve CUPS physical scale when requested.
+
+    Continuous jobs trim white page padding. Sensor labels keep physical height.
+    """
     gray_img = page.to_pil_image()
-
-    # Determine scaling:
-    # If the image matches 50mm paper (or full printhead), scale to 384 dots width.
-    # If smaller (e.g., 40mm or 30mm labels), center within 384 dots.
-    src_w, src_h = gray_img.size
-    aspect = src_h / max(1, src_w)
-
-    # Calculate physical width ratio if page name indicates size:
-    active_width = target_width
-    offset_x = 0
-    if '40x' in page.page_name.lower():
-        active_width = 304  # 38 mm @ 8 dots/mm
-        offset_x = (target_width - active_width) // 2
-    elif '30x' in page.page_name.lower():
-        active_width = 224  # 28 mm @ 8 dots/mm
-        offset_x = (target_width - active_width) // 2
-
-    scaled_h = max(1, round(active_width * aspect))
-    resized = gray_img.resize((active_width, scaled_h), Image.Resampling.LANCZOS)
-
-    # Composite onto full 384-width white background
-    full_page = Image.new('L', (target_width, scaled_h), 255)
-    full_page.paste(resized, (offset_x, 0))
+    bbox = ImageOps.invert(gray_img).getbbox()
+    if bbox is None:
+        return []  # A blank CUPS page must not feed a whole roll page.
+    dpi_x, dpi_y = page.resolution
+    dpi_x = dpi_x or 203.2
+    dpi_y = dpi_y or dpi_x
+    page_width_mm = page.page_size[0] * 25.4 / 72 if page.page_size[0] else page.width * 25.4 / dpi_x
+    page_height_mm = page.page_size[1] * 25.4 / 72 if page.page_size[1] else page.height * 25.4 / dpi_y
+    # Native CUPS pages have physical dimensions. Synthetic pages can omit them.
+    printable_mm = page_width_mm - 2 if page.page_size[0] else page_width_mm
+    active_width = min(target_width, max(1, round(printable_mm * DOTS_PER_MM)))
+    label_height = max(1, round(page_height_mm * DOTS_PER_MM))
+    if scaling.lower() == 'fitcontent':
+        content = gray_img.crop(bbox)
+        # Removing lateral white margins can make artwork much taller than the
+        # selected page if fitted by width alone. Bound both axes on roll media too.
+        factor = min(active_width / content.width, label_height / content.height)
+        content = content.resize((max(1, round(content.width * factor)),
+                                  max(1, round(content.height * factor))), Image.Resampling.LANCZOS)
+        output_height = content.height if media_type == 0 else label_height
+        full_page = Image.new('L', (target_width, output_height), 255)
+        full_page.paste(content, (target_width - content.width,
+                                  0 if media_type == 0 else (output_height - content.height) // 2))
+    else:
+        # Convert resolution to 8 dots/mm without shrinking the physical page to 48 mm.
+        size = (max(1, round(page.width * 203.2 / dpi_x)),
+                max(1, round(page.height * 203.2 / dpi_y)))
+        resized = gray_img.resize(size, Image.Resampling.LANCZOS)
+        full_page = Image.new('L', (target_width, size[1]), 255)
+        x = (target_width - resized.width if resized.width < target_width
+             else (target_width - resized.width) // 2)
+        full_page.paste(resized, (x, 0))
+        if media_type == 0:
+            ink = ImageOps.invert(full_page).getbbox()
+            if ink is None:
+                return []
+            full_page = full_page.crop((0, ink[1], target_width, ink[3]))
+    scaled_h = full_page.height
+    if scaled_h + 1 > 65535 or math.ceil(scaled_h * 10 / DOTS_PER_MM) > 65535:
+        raise ValueError('Raster exceeds E210 page length limits')
+    sys.stderr.write(f'DEBUG: E210 source={page.width}x{page.height} dpi={dpi_x}x{dpi_y} '
+                     f'content={bbox} scaling={scaling} output={target_width}x{scaled_h} '
+                     f'media={media_type}\n')
 
     # Convert to 1-bit monochrome
     if dither.lower() == 'threshold':
@@ -280,9 +327,10 @@ def main():
         for page in read_cups_raster_stream(input_stream):
             page_count += 1
             sys.stderr.write(f'PAGE: {page_count} {copies}\n')
-            media_type = resolve_media_type(opts, page.page_name)
+            media_type = resolve_media_type(opts, page.page_name, page.media_type)
             page_chunks = convert_page_to_e210_chunks(
-                page, density=density, media_type=media_type, dither=dither
+                page, density=density, media_type=media_type, dither=dither,
+                scaling=str(opts.get('e210scaling', 'fitcontent')).lower()
             )
             job_chunks.extend(page_chunks * copies)
     finally:

@@ -5,10 +5,29 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools'))
-from probe_bluez import Profile
+from probe_bluez import Profile, run_connection
 
 
 class SendTimingTests(unittest.TestCase):
+    def test_known_device_connects_without_discovery_or_polling(self):
+        bus, adapter, manager, objects, device, loop = (Mock() for _ in range(6))
+        path = '/org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF'
+        proxies = {'/': objects, '/org/bluez': manager, '/org/bluez/hci0': adapter, path: device}
+        bus.get_object.side_effect = lambda service, path: proxies[path]
+        objects.GetManagedObjects.return_value = {path: {}}
+        profile = SimpleNamespace(connected=True, error=None, query=None, print_test=False,
+                                  feed_test=False, job=None, close=Mock(), fail=Mock())
+        with patch('probe_bluez.dbus.SystemBus', return_value=bus), \
+                patch('probe_bluez.dbus.Interface', side_effect=lambda obj, interface: obj), \
+                patch('probe_bluez.GLib.MainLoop', return_value=loop), \
+                patch('probe_bluez.GLib.timeout_add_seconds', return_value=10003), \
+                patch('probe_bluez.GLib.timeout_add') as poll:
+            self.assertEqual(run_connection('AA:BB:CC:DD:EE:FF', 'hci0', 10,
+                                            lambda bus, loop: profile), 0)
+        device.ConnectProfile.assert_called_once()
+        adapter.StartDiscovery.assert_not_called()
+        poll.assert_not_called()
+
     def test_partial_write_keeps_unsent_bytes(self):
         state = SimpleNamespace(stream=Mock(), pending=b'abcdef', chunks=[])
         state.stream.send.return_value = 2

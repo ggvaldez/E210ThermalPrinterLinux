@@ -226,13 +226,17 @@ def run_connection(address, adapter_name, timeout, profile_factory):
     path = adapter_path + '/dev_' + address.upper().replace(':', '_')
     profile = profile_factory(bus, loop)
     registered = discovering = connecting = False
+    poll_timer = deadline_timer = None
 
     def connect_when_found():
-        nonlocal connecting
+        nonlocal connecting, discovering
         if connecting:
             return False
         if path not in object_manager.GetManagedObjects():
             return True
+        if discovering:
+            adapter.StopDiscovery()
+            discovering = False
         connecting = True
         device = dbus.Interface(bus.get_object('org.bluez', path), 'org.bluez.Device1')
         device.ConnectProfile(SPP, reply_handler=lambda: None, error_handler=profile.fail, timeout=timeout)
@@ -252,15 +256,22 @@ def run_connection(address, adapter_name, timeout, profile_factory):
             'AutoConnect': dbus.Boolean(False),
         })
         registered = True
-        adapter.StartDiscovery()
-        discovering = True
-        GLib.timeout_add(500, connect_when_found)
-        GLib.timeout_add_seconds(timeout, expire)
+        # Known devices can connect immediately; inquiry is only needed if missing.
+        if connect_when_found():
+            adapter.StartDiscovery()
+            discovering = True
+            poll_timer = GLib.timeout_add(100, connect_when_found)
+        deadline_timer = GLib.timeout_add_seconds(timeout, expire)
         loop.run()
     except (dbus.DBusException, KeyboardInterrupt) as exc:
         profile.error = str(exc) or 'Interrupted'
         print(profile.error, file=sys.stderr)
     finally:
+        for timer in (poll_timer, deadline_timer):
+            if timer is not None:
+                source = GLib.MainContext.default().find_source_by_id(timer)
+                if source is not None:
+                    source.destroy()
         profile.close()
         if discovering:
             try:

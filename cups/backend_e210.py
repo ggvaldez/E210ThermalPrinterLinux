@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""CUPS backend for the E210 Bluetooth thermal printer.
+"""CUPS backend for the E210 Bluetooth/USB thermal printer.
 
 Handles:
 1. Discovery mode (0 arguments): Emits detected/registered E210 printers to CUPS.
-2. Printing mode (5 or 6 arguments): Reads E210 command stream, connects via BlueZ SPP,
+2. Printing mode (5 or 6 arguments): Reads E210 command stream, connects via BlueZ SPP or USB,
    and transmits to the printer specified in DEVICE_URI.
 """
 
@@ -11,6 +11,7 @@ import os
 import re
 import sys
 from pathlib import Path
+from urllib.parse import urlsplit
 
 # Look for tools relative to this script, or in standard install path
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -38,6 +39,19 @@ def run_discovery():
     sys.stdout.write(
         'direct e210://auto "E210 Thermal Printer" "E210 Thermal Printer (Auto-detect)" "MFG:E210;MDL:E210;CMD:E210;"\n'
     )
+    sys.stdout.write(
+        'direct e210://usb "E210" "E210 Thermal Printer (USB Auto-detect)" "MFG:E210;MDL:E210;CMD:E210;"\n'
+    )
+    try:
+        from e210_usb import find_usb_printers
+        for printer in find_usb_printers():
+            bus, address = printer.selector.split(':')
+            sys.stdout.write(
+                f'direct e210://usb/{bus}/{address} "E210" '
+                f'"E210 Thermal Printer (USB {printer.selector})" "MFG:E210;MDL:E210;CMD:E210;"\n'
+            )
+    except OSError as exc:
+        sys.stderr.write(f'DEBUG: USB discovery error: {exc}\n')
 
     try:
         import dbus
@@ -88,6 +102,19 @@ def extract_target_address(device_uri, adapter_name='hci0'):
     return addr
 
 
+def extract_usb_selector(device_uri):
+    """Validate e210://usb or e210://usb/BUS/DEVICE before opening hardware."""
+    from e210_usb import validate_selector
+    match = re.fullmatch(r'e210://usb(?:/([0-9]{1,3})/([0-9]{1,3}))?', device_uri, re.IGNORECASE)
+    if not match:
+        raise ValueError('USB DEVICE_URI must be e210://usb or e210://usb/BUS/DEVICE')
+    if match.group(1) is None:
+        return None
+    selector = f'{match.group(1)}:{match.group(2)}'
+    validate_selector(selector)
+    return selector
+
+
 def main():
     # 1. Discovery mode
     if len(sys.argv) == 1:
@@ -106,11 +133,6 @@ def main():
     device_uri = os.environ.get('DEVICE_URI', '')
     sys.stderr.write(f'DEBUG: Starting print job {job_id} for user {user}: {title} on {device_uri}\n')
 
-    address = extract_target_address(device_uri)
-    if not address:
-        sys.stderr.write('STATE: +offline-report\n')
-        return CUPS_BACKEND_RETRY
-
     # Read binary print payload
     if len(sys.argv) >= 7 and sys.argv[6]:
         try:
@@ -125,6 +147,34 @@ def main():
     if not data:
         sys.stderr.write('DEBUG: Empty print job received.\n')
         return CUPS_BACKEND_OK
+
+    try:
+        is_usb = urlsplit(device_uri).netloc.lower() == 'usb'
+        selector = extract_usb_selector(device_uri) if is_usb else None
+    except ValueError as exc:
+        sys.stderr.write(f'ERROR: {exc}\n')
+        return CUPS_BACKEND_FAILED
+
+    if is_usb:
+        from e210_usb import send_usb
+        sys.stderr.write('STATE: +connecting-to-device\n')
+        try:
+            printer = send_usb([data], selector)
+        except (OSError, ValueError) as exc:
+            sys.stderr.write(f'ERROR: USB print job failed: {exc}\n')
+            sys.stderr.write('STATE: +offline-report\n')
+            # Leave failure handling to CUPS without requesting a backend retry.
+            return CUPS_BACKEND_FAILED
+        finally:
+            sys.stderr.write('STATE: -connecting-to-device\n')
+        sys.stderr.write(f'INFO: Print job sent via USB ({printer.selector}).\n')
+        sys.stderr.write('STATE: -offline-report\n')
+        return CUPS_BACKEND_OK
+
+    address = extract_target_address(device_uri)
+    if not address:
+        sys.stderr.write('STATE: +offline-report\n')
+        return CUPS_BACKEND_RETRY
 
     sys.stderr.write(f'STATE: +connecting-to-device\n')
     sys.stderr.write(f'INFO: Connecting to E210 at {address}...\n')

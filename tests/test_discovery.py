@@ -48,6 +48,27 @@ class DiscoveryTests(unittest.TestCase):
         self.assertEqual(address, 'BB:BB:BB:BB:BB:BB')
         mock_adapter.StartDiscovery.assert_not_called()
 
+    def test_scan_stops_as_soon_as_device_is_visible(self):
+        objects = {'/org/bluez/hci0/dev_AA': {'org.bluez.Device1': {
+            'Name': 'E210', 'Address': 'AA:BB:CC:DD:EE:FF', 'RSSI': -40}}}
+        bus, manager, adapter, loop = Mock(), Mock(), Mock(), Mock()
+        manager.GetManagedObjects.side_effect = [{}, objects, objects]
+        bus.get_object.side_effect = lambda service, path: manager if path == '/' else adapter
+        callbacks = []
+        def schedule(interval, callback):
+            callbacks.append(callback)
+            return 10001
+        loop.run.side_effect = lambda: self.assertFalse(callbacks[0]())
+        with patch('dbus.SystemBus', return_value=bus), \
+                patch('dbus.Interface', side_effect=lambda obj, interface: obj), \
+                patch('gi.repository.GLib.MainLoop', return_value=loop), \
+                patch('gi.repository.GLib.timeout_add', side_effect=schedule), \
+                patch('gi.repository.GLib.timeout_add_seconds', return_value=10002), \
+                patch('builtins.print'):
+            self.assertEqual(discover_address(), 'AA:BB:CC:DD:EE:FF')
+        loop.quit.assert_called_once()
+        adapter.StopDiscovery.assert_called_once()
+
     def test_dry_run_does_not_discover_or_print(self):
         from PIL import Image
         with patch('sys.argv', ['print_png.py', 'example.png', '--dry-run']), \

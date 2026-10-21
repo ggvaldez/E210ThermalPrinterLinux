@@ -5,6 +5,31 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(dirname "$SCRIPT_DIR")"
 
+QUEUE_URI=""
+case "${1:-}" in
+    --usb) QUEUE_URI="e210://usb" ;;
+    --bluetooth) QUEUE_URI="e210://auto" ;;
+    "") ;;
+    *) echo "Usage: sudo $0 [--usb|--bluetooth]"; exit 1 ;;
+esac
+if [ "$#" -gt 1 ]; then
+    echo "Usage: sudo $0 [--usb|--bluetooth]"
+    exit 1
+fi
+# Preserve an existing E210 connection when updating its filter/PPD.
+if [ -z "$QUEUE_URI" ] && command -v lpstat >/dev/null 2>&1; then
+    existing_queue="$(LC_ALL=C lpstat -v E210 2>/dev/null || true)"
+    existing_uri="${existing_queue#*: }"
+    case "$existing_uri" in
+        e210://*) QUEUE_URI="$existing_uri" ;;
+    esac
+fi
+QUEUE_URI="${QUEUE_URI:-e210://auto}"
+QUEUE_LOCATION="Bluetooth"
+case "$QUEUE_URI" in
+    e210://usb*) QUEUE_LOCATION="USB" ;;
+esac
+
 echo "=== E210 Thermal Printer CUPS Installer ==="
 
 # Check root privileges
@@ -73,7 +98,7 @@ cp "$REPO_DIR/cups/rastertoe210" "$CUPS_SERVER_BIN/filter/rastertoe210"
 chmod 755 "$CUPS_SERVER_BIN/filter/rastertoe210"
 chown root:root "$CUPS_SERVER_BIN/filter/rastertoe210"
 
-echo "3. Installing CUPS Bluetooth backend..."
+echo "3. Installing CUPS Bluetooth/USB backend..."
 mkdir -p "$CUPS_SERVER_BIN/backend"
 cp "$REPO_DIR/cups/e210" "$CUPS_SERVER_BIN/backend/e210"
 # In CUPS, 0700 permissions run the backend as root (required for BlueZ D-Bus Profile1 registration)
@@ -103,18 +128,18 @@ fi
 if command -v lpadmin >/dev/null 2>&1; then
     echo "5. Configuring CUPS printer queue 'E210'..."
     lpadmin -p E210 -E \
-        -v e210://auto \
+        -v "$QUEUE_URI" \
         -P "$CUPS_DATA_DIR/model/e210.ppd" \
-        -D "E210 Bluetooth Thermal Printer" \
-        -L "Bluetooth"
+        -D "E210 Thermal Printer" \
+        -L "$QUEUE_LOCATION"
     cupsenable E210 2>/dev/null || true
     cupsaccept E210 2>/dev/null || true
     echo "Printer queue 'E210' created and enabled."
-    echo "Device URI: e210://auto"
+    echo "Device URI: $QUEUE_URI"
 fi
 
 echo ""
 echo "=== Installation Complete! ==="
 echo "You can now print to 'E210' from any application or via CLI:"
 echo "    lp -d E210 document.pdf"
-echo "    lp -d E210 -o media=Label50x50mm -o Darkness=8 label.pdf"
+echo "    lp -d E210 -o PageSize=50x50mm -o MediaType=Gap -o Darkness=8 label.pdf"

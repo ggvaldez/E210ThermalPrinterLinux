@@ -15,6 +15,9 @@ from png_job import DOTS_PER_MM, MEDIA_TYPES, prepare_png
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('image', help='PNG file to print')
+    parser.add_argument('--transport', choices=('bluetooth', 'usb'), default='bluetooth',
+                        help='Connection type (default: bluetooth)')
+    parser.add_argument('--usb-device', help='Select USB BUS:DEVICE; default: the only connected E210')
     parser.add_argument('--address', help='Bluetooth address; if omitted, automatically discovers the E210')
     parser.add_argument('--adapter', default='hci0')
     parser.add_argument('--density', type=int, default=6, help='Thermal density from 0 to 16 (default: 6)')
@@ -30,6 +33,17 @@ def main():
     parser.add_argument('--finish-delay-ms', type=int, default=0,
                         help='Delay before final feed commands of each copy (default: 0)')
     args = parser.parse_args()
+    if args.usb_device and args.transport != 'usb':
+        parser.error('--usb-device requires --transport usb')
+    if args.transport == 'usb':
+        if args.address or args.adapter != 'hci0':
+            parser.error('--address and --adapter apply only to Bluetooth')
+        if args.usb_device:
+            from e210_usb import validate_selector
+            try:
+                validate_selector(args.usb_device)
+            except ValueError as exc:
+                parser.error(str(exc))
     if args.pause_ms < 0:
         parser.error('--pause-ms cannot be negative')
     if args.finish_delay_ms < 0:
@@ -50,6 +64,17 @@ def main():
           f'{args.copies} copy(ies), media {args.media}; '
           f'{sum(map(len, chunks))} bytes.', flush=True)
     if args.dry_run:
+        return 0
+    if args.transport == 'usb':
+        from e210_usb import send_usb
+        try:
+            printer = send_usb(chunks, args.usb_device, args.pause_ms, args.finish_delay_ms)
+        except (OSError, ValueError) as exc:
+            parser.exit(1, f'USB error: {exc}\n')
+        except KeyboardInterrupt:
+            parser.exit(1, 'USB send interrupted; the job may be incomplete.\n')
+        print(f'Send completed via USB ({printer.selector}). '
+              'The printer does not provide physical confirmation in this stream.')
         return 0
     from probe_bluez import Profile, run_connection
     if not args.address:

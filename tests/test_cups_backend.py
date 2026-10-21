@@ -10,6 +10,7 @@ from backend_e210 import (
     CUPS_BACKEND_OK,
     CUPS_BACKEND_RETRY,
     extract_target_address,
+    extract_usb_selector,
     main as backend_main,
     run_discovery,
 )
@@ -83,6 +84,35 @@ class CupsBackendTests(unittest.TestCase):
                 patch('sys.stderr'):
             code = backend_main()
             self.assertEqual(code, CUPS_BACKEND_RETRY)
+
+    def test_usb_uri_validation(self):
+        self.assertIsNone(extract_usb_selector('e210://usb'))
+        self.assertEqual(extract_usb_selector('e210://usb/001/028'), '001:028')
+        for uri in ('http://usb', 'e210://usb/0/1', 'e210://usb/1/128',
+                    'e210://usb/1/2?x=1', 'e210://usb/../2'):
+            with self.subTest(uri=uri), self.assertRaises(ValueError):
+                extract_usb_selector(uri)
+
+    def test_usb_backend_uses_qlabel_payload_without_bluez(self):
+        from e210_usb import USBPrinter
+        payload = b'\x1c\x21\x06test\x1bi\x1bJ\0'
+        with patch('sys.argv', ['e210', '1', 'guest', 'Job', '1', '']), \
+                patch.dict('os.environ', {'DEVICE_URI': 'e210://usb'}), \
+                patch('sys.stdin.buffer.read', return_value=payload), \
+                patch.dict('sys.modules', {'probe_bluez': None, 'dbus': None}), \
+                patch('e210_usb.send_usb', return_value=USBPrinter(1, 28, 'E210')) as send, \
+                patch('sys.stderr'):
+            self.assertEqual(backend_main(), CUPS_BACKEND_OK)
+            send.assert_called_once_with([payload], None)
+
+    def test_usb_failure_reports_failure_without_requesting_retry(self):
+        with patch('sys.argv', ['e210', '1', 'guest', 'Job', '1', '']), \
+                patch.dict('os.environ', {'DEVICE_URI': 'e210://usb/001/028'}), \
+                patch('sys.stdin.buffer.read', return_value=b'job'), \
+                patch('e210_usb.send_usb', side_effect=OSError('disconnected')) as send, \
+                patch('sys.stderr'):
+            self.assertEqual(backend_main(), CUPS_BACKEND_FAILED)
+            send.assert_called_once_with([b'job'], '001:028')
 
 
 if __name__ == '__main__':

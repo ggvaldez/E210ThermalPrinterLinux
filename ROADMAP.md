@@ -6,7 +6,7 @@
 - [x] Identify QLabel by Play Store URL, package name, and version.
 - [x] Record Linux distribution, kernel, and Bluetooth adapter used in tests.
 - [x] Verify discovery and pairing on Linux.
-- [x] Identify the transport used in the tested path: Classic Bluetooth/RFCOMM.
+- [x] Identify and validate Classic Bluetooth/RFCOMM and USB transports.
 - [x] Record available services, UUIDs, characteristics, and properties.
 
 ## 2. Protocol
@@ -31,3 +31,7 @@
 - [x] Document installation, permissions, and troubleshooting.
 - [x] Add tests for protocol and image processing components.
 - [x] Implement CUPS integration (PPD, raster filter, backend, and installer).
+
+- [x] Add native libusb transport to the PNG CLI and CUPS backend.
+- [x] Validate USB PNG printing on the physical E210.
+- [ ] Physically validate the installed CUPS queue over USB.
