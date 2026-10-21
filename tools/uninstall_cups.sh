@@ -10,6 +10,33 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
+# Detect CUPS paths dynamically
+CUPS_SERVER_BIN=""
+CUPS_DATA_DIR=""
+
+if command -v cups-config >/dev/null 2>&1; then
+    CUPS_SERVER_BIN="$(cups-config --serverbin 2>/dev/null || true)"
+    CUPS_DATA_DIR="$(cups-config --datadir 2>/dev/null || true)"
+fi
+
+if [ -z "$CUPS_SERVER_BIN" ] || [ ! -d "$CUPS_SERVER_BIN" ]; then
+    for candidate in /usr/lib/cups /usr/libexec/cups /usr/local/lib/cups /usr/local/libexec/cups; do
+        if [ -d "$candidate" ]; then
+            CUPS_SERVER_BIN="$candidate"
+            break
+        fi
+    done
+fi
+
+if [ -z "$CUPS_DATA_DIR" ] || [ ! -d "$CUPS_DATA_DIR" ]; then
+    for candidate in /usr/share/cups /usr/local/share/cups; do
+        if [ -d "$candidate" ]; then
+            CUPS_DATA_DIR="$candidate"
+            break
+        fi
+    done
+fi
+
 # Remove CUPS printer queue
 if command -v lpadmin >/dev/null 2>&1; then
     echo "1. Removing CUPS printer queue 'E210'..."
@@ -17,9 +44,13 @@ if command -v lpadmin >/dev/null 2>&1; then
 fi
 
 echo "2. Removing driver files..."
-rm -f /usr/lib/cups/filter/rastertoe210
-rm -f /usr/lib/cups/backend/e210
-rm -f /usr/share/cups/model/e210.ppd
+if [ -n "$CUPS_SERVER_BIN" ]; then
+    rm -f "$CUPS_SERVER_BIN/filter/rastertoe210"
+    rm -f "$CUPS_SERVER_BIN/backend/e210"
+fi
+if [ -n "$CUPS_DATA_DIR" ]; then
+    rm -f "$CUPS_DATA_DIR/model/e210.ppd"
+fi
 rm -rf /usr/share/e210
 
 # Restart CUPS service if running

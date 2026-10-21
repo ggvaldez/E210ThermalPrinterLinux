@@ -14,15 +14,53 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
-# Detect CUPS paths
-CUPS_SERVER_BIN="/usr/lib/cups"
-CUPS_DATA_DIR="/usr/share/cups"
-SHARED_TOOLS_DIR="/usr/share/e210/tools"
+# Detect CUPS paths dynamically
+CUPS_SERVER_BIN=""
+CUPS_DATA_DIR=""
 
-if [ ! -d "$CUPS_SERVER_BIN" ]; then
-    echo "Error: CUPS directory $CUPS_SERVER_BIN not found. Please install CUPS first."
+if command -v cups-config >/dev/null 2>&1; then
+    CUPS_SERVER_BIN="$(cups-config --serverbin 2>/dev/null || true)"
+    CUPS_DATA_DIR="$(cups-config --datadir 2>/dev/null || true)"
+fi
+
+if [ -z "$CUPS_SERVER_BIN" ] || [ ! -d "$CUPS_SERVER_BIN" ]; then
+    for candidate in /usr/lib/cups /usr/libexec/cups /usr/local/lib/cups /usr/local/libexec/cups; do
+        if [ -d "$candidate" ]; then
+            CUPS_SERVER_BIN="$candidate"
+            break
+        fi
+    done
+fi
+
+if [ -z "$CUPS_DATA_DIR" ] || [ ! -d "$CUPS_DATA_DIR" ]; then
+    for candidate in /usr/share/cups /usr/local/share/cups; do
+        if [ -d "$candidate" ]; then
+            CUPS_DATA_DIR="$candidate"
+            break
+        fi
+    done
+fi
+
+if [ -z "$CUPS_SERVER_BIN" ] || [ ! -d "$CUPS_SERVER_BIN" ]; then
+    echo "Error: Could not detect CUPS serverbin directory."
+    echo "Checked: cups-config --serverbin, /usr/lib/cups, /usr/libexec/cups"
+    echo "Please ensure the CUPS package is installed."
     exit 1
 fi
+
+if [ -z "$CUPS_DATA_DIR" ] || [ ! -d "$CUPS_DATA_DIR" ]; then
+    echo "Error: Could not detect CUPS datadir directory."
+    echo "Checked: cups-config --datadir, /usr/share/cups, /usr/local/share/cups"
+    echo "Please ensure the CUPS package is installed."
+    exit 1
+fi
+
+SHARED_TOOLS_DIR="/usr/share/e210/tools"
+
+echo "Detected CUPS paths:"
+echo "  Server binaries: $CUPS_SERVER_BIN"
+echo "  Data directory:  $CUPS_DATA_DIR"
+echo ""
 
 echo "1. Installing helper tools to $SHARED_TOOLS_DIR..."
 mkdir -p "$SHARED_TOOLS_DIR"
