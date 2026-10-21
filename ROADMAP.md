@@ -4,17 +4,17 @@
 
 - [ ] Record photos or information from the device label, variant, and firmware, if available.
 - [x] Identify QLabel by Play Store URL, package name, and version.
-- [ ] Record Linux distribution, kernel, and Bluetooth adapter used in tests.
-- [ ] Verify discovery and pairing on Linux.
+- [x] Record Linux distribution, kernel, and Bluetooth adapter used in tests.
+- [x] Verify discovery and pairing on Linux.
 - [x] Identify the transport used in the tested path: Classic Bluetooth/RFCOMM.
-- [ ] Record available services, UUIDs, characteristics, and properties.
+- [x] Record available services, UUIDs, characteristics, and properties.
 
 ## 2. Protocol
 
 - [ ] Capture a known print session with QLabel.
-- [ ] Correlate transmitted data with label content and dimensions.
+- [x] Correlate transmitted data with label content and dimensions.
 - [x] Identify configuration, raster encoding, and termination for the proof of concept.
-- [ ] Determine fragmentation, send limits, acknowledgments, and timing.
+- [x] Determine fragmentation, send limits, acknowledgments, and timing.
 - [x] Document the raster path with examples and confidence levels for conclusions.
 
 ## 3. Linux Proof of Concept
@@ -22,7 +22,7 @@
 - [x] Implement connection and transmission based on the observed protocol.
 - [x] Print a test label on the physical E210.
 - [x] Document the complete procedure and results.
-- [ ] Handle disconnection, unavailability, and observed errors.
+- [x] Handle disconnection, unavailability, and observed errors.
 
 ## 4. Daily Usage
 
