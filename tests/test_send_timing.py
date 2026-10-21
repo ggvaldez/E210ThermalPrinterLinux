@@ -34,6 +34,27 @@ class SendTimingTests(unittest.TestCase):
                 timer.assert_called_once_with(expected, state.start_write)
                 self.assertEqual(state.pending, next_chunk)
 
+    def test_send_completion_schedules_finish_without_waiting_for_messages(self):
+        state = SimpleNamespace(stream=Mock(), pending=b'\xff', chunks=[],
+                                operation=Mock(return_value='print-png'),
+                                total_bytes=1, query=None, finish_send=Mock(),
+                                finish_timer=None)
+        state.stream.send.return_value = 1
+        with patch('probe_bluez.GLib.timeout_add', return_value=123) as timer, patch('builtins.print'):
+            self.assertFalse(Profile.write(state, None, None))
+        self.assertTrue(state.sent)
+        self.assertIsNone(state.write_watch)
+        timer.assert_called_once_with(200, state.finish_send)
+
+    def test_query_read_schedules_finish_after_receiving_response(self):
+        state = SimpleNamespace(stream=Mock(), received=bytearray(),
+                                query='status', finish_send=Mock(), finish_timer=None)
+        state.stream.recv.return_value = bytes.fromhex('1b060003')
+        with patch('probe_bluez.GLib.timeout_add', return_value=456) as timer, patch('builtins.print'):
+            self.assertTrue(Profile.read(state, None, None))
+        self.assertEqual(state.received, bytes.fromhex('1b060003'))
+        timer.assert_called_once_with(200, state.finish_send)
+
 
 if __name__ == '__main__':
     unittest.main()

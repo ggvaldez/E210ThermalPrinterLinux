@@ -12,16 +12,14 @@ from png_job import DOTS_PER_MM, MEDIA_TYPES, prepare_png
 
 
 def e210_candidates(objects, adapter_path):
-    """Select E210 devices seen in current discovery or already connected on this adapter."""
+    """Select E210 devices registered or seen on this adapter."""
     addresses = set()
     for path, interfaces in objects.items():
         device = interfaces.get('org.bluez.Device1', {})
         if not str(path).startswith(adapter_path + '/dev_'):
             continue
-        name = str(device.get('Name', '')).upper()
+        name = str(device.get('Name', device.get('Alias', ''))).upper()
         if not name.startswith('E210') or not device.get('Address'):
-            continue
-        if 'RSSI' not in device and not device.get('Connected', False):
             continue
         addresses.add(str(device['Address']))
     return sorted(addresses)
@@ -35,8 +33,28 @@ def discover_address(adapter_name, seconds=10):
     DBusGMainLoop(set_as_default=True)
     bus = dbus.SystemBus(private=True)
     adapter_path = '/org/bluez/' + adapter_name
-    adapter = dbus.Interface(bus.get_object('org.bluez', adapter_path), 'org.bluez.Adapter1')
     manager = dbus.Interface(bus.get_object('org.bluez', '/'), 'org.freedesktop.DBus.ObjectManager')
+
+    # If an E210 is already registered in BlueZ, use it without scanning
+    managed_objects = manager.GetManagedObjects()
+    registered = e210_candidates(managed_objects, adapter_path)
+    if len(registered) == 1:
+        bus.close()
+        print(f'Using registered E210: {registered[0]}', flush=True)
+        return registered[0]
+    if len(registered) > 1:
+        active = [addr for addr in registered if any(
+            interfaces.get('org.bluez.Device1', {}).get('Address') == addr and
+            (interfaces.get('org.bluez.Device1', {}).get('Connected', False) or
+             'RSSI' in interfaces.get('org.bluez.Device1', {}))
+            for interfaces in managed_objects.values()
+        )]
+        if len(active) == 1:
+            bus.close()
+            print(f'Using registered E210: {active[0]}', flush=True)
+            return active[0]
+
+    adapter = dbus.Interface(bus.get_object('org.bluez', adapter_path), 'org.bluez.Adapter1')
     loop = GLib.MainLoop()
 
     def finish():
@@ -51,7 +69,17 @@ def discover_address(adapter_name, seconds=10):
         started = True
         GLib.timeout_add_seconds(seconds, finish)
         loop.run()
-        candidates = e210_candidates(manager.GetManagedObjects(), adapter_path)
+        managed_objects = manager.GetManagedObjects()
+        candidates = e210_candidates(managed_objects, adapter_path)
+        if len(candidates) > 1:
+            active = [addr for addr in candidates if any(
+                interfaces.get('org.bluez.Device1', {}).get('Address') == addr and
+                (interfaces.get('org.bluez.Device1', {}).get('Connected', False) or
+                 'RSSI' in interfaces.get('org.bluez.Device1', {}))
+                for interfaces in managed_objects.values()
+            )]
+            if len(active) == 1:
+                candidates = active
     finally:
         if started:
             adapter.StopDiscovery()

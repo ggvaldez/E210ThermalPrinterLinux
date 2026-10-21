@@ -42,6 +42,7 @@ class Profile(dbus.service.Object):
         self.error = None
         self.watch = None
         self.query_timer = None
+        self.finish_timer = None
 
     @dbus.service.method('org.bluez.Profile1', in_signature='', out_signature='')
     def Release(self):
@@ -53,9 +54,14 @@ class Profile(dbus.service.Object):
         self.stream.setblocking(False)
         self.connected = True
         print(json.dumps({'event': 'connected', 'peer': self.stream.getpeername()}), flush=True)
-        self.watch = GLib.io_add_watch(
-            self.stream.fileno(), GLib.IO_IN | GLib.IO_HUP | GLib.IO_ERR, self.read
-        )
+        if self.query:
+            self.watch = GLib.io_add_watch(
+                self.stream.fileno(), GLib.IO_IN | GLib.IO_HUP | GLib.IO_ERR, self.read
+            )
+        else:
+            self.watch = GLib.io_add_watch(
+                self.stream.fileno(), GLib.IO_HUP | GLib.IO_ERR, self.read
+            )
         if self.query or self.print_test or self.feed_test or self.job:
             self.query_timer = GLib.timeout_add(300, self.send_query)
         else:
@@ -126,6 +132,15 @@ class Profile(dbus.service.Object):
         self.write_watch = None
         print(json.dumps({'event': 'sent', 'operation': self.operation(),
                           'bytes': self.total_bytes}), flush=True)
+        if not self.query:
+            if getattr(self, 'finish_timer', None) is not None:
+                GLib.source_remove(self.finish_timer)
+            self.finish_timer = GLib.timeout_add(200, self.finish_send)
+        return False
+
+    def finish_send(self):
+        self.finish_timer = None
+        self.loop.quit()
         return False
 
     def read(self, source, condition):
@@ -143,7 +158,10 @@ class Profile(dbus.service.Object):
             return False
         self.received.extend(chunk)
         print(json.dumps({'event': 'received', 'hex': chunk.hex()}), flush=True)
-        # Keep reading until timeout: socket reads are not message boundaries.
+        if self.query:
+            if getattr(self, 'finish_timer', None) is not None:
+                GLib.source_remove(self.finish_timer)
+            self.finish_timer = GLib.timeout_add(200, self.finish_send)
         return True
 
     @dbus.service.method('org.bluez.Profile1', in_signature='o', out_signature='')
@@ -158,6 +176,9 @@ class Profile(dbus.service.Object):
         if self.query_timer is not None:
             GLib.source_remove(self.query_timer)
             self.query_timer = None
+        if getattr(self, 'finish_timer', None) is not None:
+            GLib.source_remove(self.finish_timer)
+            self.finish_timer = None
         if self.watch is not None:
             GLib.source_remove(self.watch)
             self.watch = None

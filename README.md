@@ -30,15 +30,15 @@ sudo systemctl enable --now bluetooth.service
 
 On other distributions, install the equivalent packages using your system package manager. The implementation does not depend specifically on CachyOS, though other distributions have not yet been tested in this project. The examples below use `python`; if your distribution provides the interpreter as `python3`, adjust the command accordingly.
 
-## Automatic Discovery
+## Automatic Discovery and Registered Devices
 
-Without `--address`, the script searches for an E210 for 10 seconds on the selected adapter:
+Without `--address`, the script first checks whether an E210 is already registered in BlueZ. If found, it uses that printer immediately without delay. If not already registered, it searches for an E210 for 10 seconds on the selected adapter:
 
 ```bash
 python tools/print_png.py image.png
 ```
 
-Turn on the printer and disconnect it from your smartphone before running. The search uses Classic Bluetooth via BlueZ. If an E210 is found, it displays the address and prints; if none is found, it reports the issue. If more than one printer is found, it lists their addresses and asks you to specify one with `--address`. `--adapter hci1` allows choosing a different adapter. `--dry-run` skips discovery and Bluetooth connection.
+Turn on the printer and disconnect it from your smartphone before running. The search uses Classic Bluetooth via BlueZ. If an E210 is found or already registered, it displays the address and prints; if none is found, it reports the issue. If more than one printer is found, it lists their addresses and asks you to specify one with `--address`. `--adapter hci1` allows choosing a different adapter. `--dry-run` skips discovery and Bluetooth connection.
 
 ### Discovering the Address Manually
 

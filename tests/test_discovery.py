@@ -1,14 +1,14 @@
 import sys
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools'))
-from print_png import e210_candidates, main
+from print_png import discover_address, e210_candidates, main
 
 
 class DiscoveryTests(unittest.TestCase):
-    def test_only_visible_e210_on_selected_adapter(self):
+    def test_registered_and_visible_e210_on_selected_adapter(self):
         def device(name, address, **extra):
             return {'org.bluez.Device1': {'Name': name, 'Address': address, **extra}}
         objects = {
@@ -19,10 +19,34 @@ class DiscoveryTests(unittest.TestCase):
             '/org/bluez/hci0/dev_E': device('e210', 'EE:EE:EE:EE:EE:EE', Connected=True),
         }
         self.assertEqual(e210_candidates(objects, '/org/bluez/hci0'),
-                         ['AA:AA:AA:AA:AA:AA', 'EE:EE:EE:EE:EE:EE'])
+                         ['AA:AA:AA:AA:AA:AA', 'BB:BB:BB:BB:BB:BB', 'EE:EE:EE:EE:EE:EE'])
 
     def test_no_devices(self):
         self.assertEqual(e210_candidates({}, '/org/bluez/hci0'), [])
+
+    def test_registered_device_used_without_discovery(self):
+        def device(name, address, **extra):
+            return {'org.bluez.Device1': {'Name': name, 'Address': address, **extra}}
+        objects = {
+            '/org/bluez/hci0/dev_B': device('E210', 'BB:BB:BB:BB:BB:BB'),
+        }
+        mock_bus = Mock()
+        mock_manager = Mock()
+        mock_manager.GetManagedObjects.return_value = objects
+        mock_adapter = Mock()
+
+        def get_object(service, path):
+            if path == '/':
+                return mock_manager
+            return mock_adapter
+
+        mock_bus.get_object.side_effect = get_object
+        with patch('dbus.SystemBus', return_value=mock_bus), \
+                patch('dbus.Interface', side_effect=lambda obj, iface: obj), \
+                patch('builtins.print'):
+            address = discover_address('hci0')
+        self.assertEqual(address, 'BB:BB:BB:BB:BB:BB')
+        mock_adapter.StartDiscovery.assert_not_called()
 
     def test_dry_run_does_not_discover_or_print(self):
         from PIL import Image
