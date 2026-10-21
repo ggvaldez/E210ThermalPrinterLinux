@@ -3,7 +3,7 @@
 *% Copyright (C) 2026 E210 Thermal Printer Linux Project
 
 *FormatVersion: "4.3"
-*FileVersion: "1.3"
+*FileVersion: "1.4"
 *LanguageVersion: English
 *LanguageEncoding: ISOLatin1
 *PCFileName: "E210.PPD"
@@ -62,6 +62,7 @@
 *Dither Atkinson/Atkinson Error Diffusion: ""
 *Dither FloydSteinberg/Floyd-Steinberg Error Diffusion: ""
 *Dither Bayer/Bayer 4x4 Ordered Dithering: ""
+*Dither Clustered/Clustered 8x8 Halftone: ""
 *Dither Threshold/Fixed Threshold (Text/Line Art): ""
 *CloseUI: *Dither
 

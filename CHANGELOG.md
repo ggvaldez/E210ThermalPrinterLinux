@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.3.0 — 2026-10-21
+
+- Add clustered-dot 8×8 halftoning (`--dither clustered` / `Dither=Clustered`)
+  to the shared CLI/CUPS conversion, retaining Atkinson and density 10 defaults.
+- Use the same 8×8 matrix as the local comparison; no ImageMagick runtime
+  dependency is required.
+
+Validation: 69 automated tests passed; the PPD validates without warnings.
+
 ## v0.2.0 — 2026-10-21
 
 - Use Atkinson dithering and density 10 by default in the PNG CLI and CUPS.

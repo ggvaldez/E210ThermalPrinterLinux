@@ -24,7 +24,7 @@ class MonochromeTests(unittest.TestCase):
     def test_binary_input_is_unchanged_for_every_method(self):
         source = Image.new('1', (17, 11))
         source.putdata([255 if i % 3 else 0 for i in range(17 * 11)])
-        for method in ('atkinson', 'floydsteinberg', 'bayer', 'threshold'):
+        for method in ('atkinson', 'floydsteinberg', 'bayer', 'clustered', 'threshold'):
             self.assertEqual(to_monochrome(source, method).tobytes(), source.tobytes())
 
     def test_bayer_midgray_pattern_repeats_and_threshold_overrides_it(self):
@@ -49,6 +49,17 @@ class MonochromeTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 to_monochrome(image, **kwargs)
 
+    def test_clustered_midgray_forms_repeating_clusters(self):
+        expected = ('..###...', '..###...', '.######.', '########',
+                    '######..', '..###...', '..##....', '...#....')
+        image = Image.new('L', (9, 9), 128)
+        mono = to_monochrome(image, 'clustered')
+        self.assertEqual(mono.size, image.size)
+        self.assertEqual(mono.convert('L').tobytes(), bytes(
+            0 if expected[y % 8][x % 8] == '#' else 255
+            for y in range(9) for x in range(9)))
+        self.assertEqual(to_monochrome(image, 'clustered', threshold=129).getextrema(), (0, 0))
+
     def test_png_and_cups_share_new_defaults_and_raster(self):
         sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'cups'))
         from rastertoe210 import CupsRasterPage, convert_page_to_e210_chunks
@@ -66,13 +77,16 @@ class MonochromeTests(unittest.TestCase):
         ppd = (Path(__file__).resolve().parents[1] / 'ppd/e210.ppd').read_text()
         self.assertIn('*DefaultDither: Atkinson', ppd)
         self.assertIn('*DefaultDarkness: 10', ppd)
-        with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / 'synthetic.png'
-            source.save(path)
-            bayer_png, _ = prepare_png(path, media='gap', label_height_mm=3, dither='bayer')
-        bayer_cups = convert_page_to_e210_chunks(page, media_type=2, scaling='actualsize', dither='Bayer')
-        self.assertEqual(bayer_png, bayer_cups)
+        for method in ('bayer', 'clustered'):
+            with self.subTest(method=method), tempfile.TemporaryDirectory() as directory:
+                path = Path(directory) / 'synthetic.png'
+                source.save(path)
+                png, _ = prepare_png(path, media='gap', label_height_mm=3, dither=method)
+                cups = convert_page_to_e210_chunks(page, media_type=2, scaling='actualsize',
+                                                  dither=method.title())
+                self.assertEqual(png, cups)
         self.assertIn('*Dither Bayer/Bayer 4x4 Ordered Dithering:', ppd)
+        self.assertIn('*Dither Clustered/Clustered 8x8 Halftone:', ppd)
 
 
 if __name__ == '__main__':

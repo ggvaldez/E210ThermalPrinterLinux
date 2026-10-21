@@ -160,7 +160,7 @@ python tools/print_png.py image.png --dither floydsteinberg --density 6
 lp -d E210 -o Dither=FloydSteinberg -o Darkness=6 document.pdf
 ```
 
-`--dither` accepts `atkinson`, `floydsteinberg`, `bayer`, and `threshold`. An explicit
+`--dither` accepts `atkinson`, `floydsteinberg`, `bayer`, `clustered`, and `threshold`. An explicit
 `--threshold` overrides the dithering method. In CUPS, use **Dithering Method →
 Atkinson** and **Print Density → 10**. Reinstall the CUPS files after updating;
 existing queues or application presets can retain older explicit choices.
@@ -171,6 +171,15 @@ Bayer uses the same 4×4 ordered matrix as the local comparison tests:
 ```bash
 python tools/print_png.py image.png --dither bayer
 lp -d E210 -o Dither=Bayer document.pdf
+```
+
+The fourth comparison method is available as `clustered`: an 8×8 clustered-dot
+halftone using the same matrix as the local tests. It requires no ImageMagick
+installation at runtime.
+
+```bash
+python tools/print_png.py image.png --dither clustered
+lp -d E210 -o Dither=Clustered document.pdf
 ```
 
 Atkinson and density 10 remain the defaults.
