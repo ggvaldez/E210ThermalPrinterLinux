@@ -64,9 +64,7 @@ echo ""
 
 echo "1. Installing helper tools to $SHARED_TOOLS_DIR..."
 mkdir -p "$SHARED_TOOLS_DIR"
-cp "$REPO_DIR/tools/e210_raster.py" "$SHARED_TOOLS_DIR/"
-cp "$REPO_DIR/tools/probe_bluez.py" "$SHARED_TOOLS_DIR/"
-cp "$REPO_DIR/tools/print_png.py" "$SHARED_TOOLS_DIR/"
+cp "$REPO_DIR/tools/"*.py "$SHARED_TOOLS_DIR/"
 chmod 755 "$SHARED_TOOLS_DIR"/*
 
 echo "2. Installing CUPS raster filter..."
@@ -78,7 +76,8 @@ chown root:root "$CUPS_SERVER_BIN/filter/rastertoe210"
 echo "3. Installing CUPS Bluetooth backend..."
 mkdir -p "$CUPS_SERVER_BIN/backend"
 cp "$REPO_DIR/cups/e210" "$CUPS_SERVER_BIN/backend/e210"
-chmod 755 "$CUPS_SERVER_BIN/backend/e210"
+# In CUPS, 0700 permissions run the backend as root (required for BlueZ D-Bus Profile1 registration)
+chmod 700 "$CUPS_SERVER_BIN/backend/e210"
 chown root:root "$CUPS_SERVER_BIN/backend/e210"
 
 echo "4. Installing PPD file..."
@@ -108,6 +107,8 @@ if command -v lpadmin >/dev/null 2>&1; then
         -P "$CUPS_DATA_DIR/model/e210.ppd" \
         -D "E210 Bluetooth Thermal Printer" \
         -L "Bluetooth"
+    cupsenable E210 2>/dev/null || true
+    cupsaccept E210 2>/dev/null || true
     echo "Printer queue 'E210' created and enabled."
     echo "Device URI: e210://auto"
 fi

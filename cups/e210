@@ -78,7 +78,7 @@ def extract_target_address(device_uri, adapter_name='hci0'):
 
     addr = match.group(1)
     if addr.lower() == 'auto':
-        from print_png import discover_address
+        from e210_discovery import discover_address
         try:
             addr = discover_address(adapter_name)
         except Exception as exc:

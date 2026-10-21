@@ -52,7 +52,7 @@ class CupsBackendTests(unittest.TestCase):
             self.assertIsNone(extract_target_address(''))
 
     def test_extract_target_address_auto_resolves(self):
-        with patch('print_png.discover_address', return_value='AA:BB:CC:DD:EE:FF'):
+        with patch('e210_discovery.discover_address', return_value='AA:BB:CC:DD:EE:FF'):
             addr = extract_target_address('e210://auto')
         self.assertEqual(addr, 'AA:BB:CC:DD:EE:FF')
 
