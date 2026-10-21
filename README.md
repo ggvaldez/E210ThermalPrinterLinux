@@ -68,13 +68,23 @@ Execute na raiz do projeto, substituindo o caminho da imagem e o endereço Bluet
 python tools/print_png.py imagem.png --address AA:BB:CC:DD:EE:FF
 ```
 
-Cada execução imprime **uma cópia**. Caminhos com espaços devem ficar entre aspas.
+Cada execução imprime **uma cópia** por padrão. Caminhos com espaços devem ficar entre aspas.
+
+### Etiquetas com intervalo e múltiplas cópias
+
+Para três cópias em etiquetas de 50 × 50 mm com intervalo entre elas:
+
+```bash
+python tools/print_png.py imagem.png --address AA:BB:CC:DD:EE:FF --media gap --label-height 50 --copies 3
+```
+
+`--label-height` é a altura da etiqueta em milímetros, sem incluir o intervalo; a largura da mídia permanece em 50 mm. O raster mantém sua proporção e precisa caber na altura informada. `--media` aceita `continuous` (padrão), `gap` e `black-mark`. Etiquetas com intervalo ou marca preta exigem altura explícita. A opção de marca preta foi identificada no Java, mas ainda não foi testada fisicamente. Cada cópia envia uma página completa com seu comando de avanço; não depende de um contador interno de cópias no firmware.
 
 A imagem é redimensionada para **384 pixels de largura**, preservando a proporção. Essa é a maior largura raster validada até agora, equivalente a **48 mm a 8 pixels/mm**, aproximadamente 203 dpi. Ainda não determinamos o limite físico absoluto da impressora.
 
 Para máxima nitidez e controle pixel a pixel, prepare o PNG já com 384 pixels de largura. Um arquivo de 384 × 384 pixels produz um raster de aproximadamente 48 × 48 mm. Metadados DPI do PNG não alteram o tamanho; a altura é calculada a partir da proporção da imagem. O avanço e as margens físicas podem diferir do tamanho do raster.
 
-Transparência é composta sobre fundo branco. Tons de cinza são convertidos para preto e branco com dithering Floyd–Steinberg. O envio mantém pausas de **20 ms entre comandos e linhas**, necessárias para a impressão correta nos testes realizados.
+Transparência é composta sobre fundo branco. Tons de cinza são convertidos para preto e branco com dithering Floyd–Steinberg. O envio ocorre **sem pausas artificiais**, respeitando a disponibilidade do socket Bluetooth. Cada cópia termina com **`1B 69` seguido de `1B 4A 00`**, para concluir a impressão antes do avanço. A ordem se aplica a todos os modos; o tipo de mídia continua sendo configurado separadamente.
 
 ### Prévia sem imprimir
 
@@ -98,7 +108,15 @@ Para ajustar a densidade térmica ou selecionar outro adaptador:
 python tools/print_png.py imagem.png --address AA:BB:CC:DD:EE:FF --density 6 --adapter hci0
 ```
 
-`--density` aceita valores de 0 a 16 e tem padrão 6. `--threshold` aceita de 0 a 255. Consulte todas as opções com:
+`--density` aceita valores de 0 a 16 e tem padrão 6. `--threshold` aceita de 0 a 255.
+
+Para experimentar um envio mais lento, use `--pause-ms 50`. O padrão é **0 ms**. A pausa vale entre comandos e linhas; o prazo da conexão é ajustado à duração estimada do trabalho. Alterar a pausa não altera os pixels nem a densidade térmica configurada.
+
+O envio sem pausas, com a ordem corrigida dos comandos finais, foi validado fisicamente com **20 escadas consecutivas**, completas e coladas, totalizando 87.160 bytes. Houve pausas do mecanismo durante o trabalho, sem perda de conteúdo observada. Isso não determina o tamanho do buffer interno.
+
+Para diagnóstico, `--finish-delay-ms 2000` insere 2 segundos antes do par de comandos finais de cada cópia. O padrão é zero: atrasos adicionais não foram necessários no teste das 20 escadas. A validação extensa da ordem corrigida foi feita com papel contínuo; o avanço em etiquetas com sensor ainda precisa ser reconfirmado.
+
+Consulte todas as opções com:
 
 ```bash
 python tools/print_png.py --help
@@ -108,8 +126,8 @@ python tools/print_png.py --help
 
 - **Erro ao importar PIL, dbus ou gi:** confira as dependências e use o Python do sistema que recebeu os pacotes nativos.
 - **Não conecta:** confira a alimentação, o endereço Bluetooth e o serviço `bluetooth.service`; desconecte a impressora de outros dispositivos. A conta deve ter acesso ao serviço BlueZ no barramento D-Bus do sistema.
-- **Pontos na mesma linha ou desenho incompleto:** use o comando de PNG, que já inclui as pausas entre envios. O primeiro teste sem pausas falhou dessa forma.
-- **Demora para imprimir:** a pausa de 20 ms limita o envio a aproximadamente 50 linhas por segundo, além do tempo de conexão e processamento.
+- **Desenho incompleto ou avanço antes de terminar:** atualize o código. A sequência inicial avançava antes da conclusão; os testes validaram a inversão dos dois comandos finais.
+- **Pausas durante um trabalho longo:** o teste de 20 escadas apresentou pausas, mas concluiu todas as imagens. O programa preserva escritas parciais do socket e não reenvia trabalhos automaticamente. Se uma impressão falhar, confira o que já saiu antes de reenviar para evitar cópias duplicadas.
 
 Para consultar o status sem imprimir:
 

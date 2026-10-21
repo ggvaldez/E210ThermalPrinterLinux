@@ -33,7 +33,7 @@ def test_pattern():
                 raster[y * (width // 8) + x // 8] |= 0x80 >> (x % 8)
     config = bytes.fromhex('1c2106 1b350000 1b340000 1c2500 1b33')
     config += bytes.fromhex('1b29') + struct.pack('<HHHB', height + 1, 500, 200, 0)
-    packet = config + encode_rows(raster, width, height) + bytes.fromhex('1b4a00 1b69')
+    packet = config + encode_rows(raster, width, height) + bytes.fromhex('1b69 1b4a00')
     return packet, f'P4\n{width} {height}\n'.encode() + raster
 
 
@@ -50,5 +50,5 @@ def test_pattern_chunks():
         length = packet[start + 3] + 4
         chunks.append(packet[start:start + length])
         start += length
-    chunks.extend((packet[-5:-2], packet[-2:]))
+    chunks.extend((packet[-5:-3], packet[-3:]))
     return chunks

@@ -20,13 +20,16 @@ QUERIES = {'settings': '1b5e', 'status': '1b06', 'model': '1b18'}
 
 
 class Profile(dbus.service.Object):
-    def __init__(self, bus, loop, query, print_test=False, feed_test=False, paced=False, job=None):
+    def __init__(self, bus, loop, query, print_test=False, feed_test=False, paced=False, job=None, pause_ms=20,
+                 finish_delay_ms=0):
         super().__init__(bus, PROFILE)
         self.loop = loop
         self.query = query
         self.print_test = print_test
         self.feed_test = feed_test
         self.paced = paced
+        self.pause_ms = pause_ms
+        self.finish_delay_ms = finish_delay_ms
         self.job = job
         self.chunks = []
         self.total_bytes = 0
@@ -70,12 +73,13 @@ class Profile(dbus.service.Object):
             else:
                 self.pending = bytes.fromhex(QUERIES[self.query])
             self.total_bytes = len(self.pending)
-            if self.paced:
+            if self.paced or (self.job and self.finish_delay_ms):
                 self.chunks = list(self.job) if self.job else test_pattern_chunks()
                 self.pending = self.chunks.pop(0)
             print(json.dumps({'event': 'prepared', 'operation': self.operation(),
                               'bytes': self.total_bytes,
-                              'pause_ms': 20 if self.paced else 0,
+                              'pause_ms': self.pause_ms if self.paced else 0,
+                              'finish_delay_ms': self.finish_delay_ms,
                               'hex': self.pending.hex() if not (self.print_test or self.job) else None}), flush=True)
             self.start_write()
         except OSError as exc:
@@ -109,8 +113,14 @@ class Profile(dbus.service.Object):
             return True
         if self.chunks:
             self.write_watch = None
+            delay = self.pause_ms if self.paced else 0
+            final_pair = [bytes.fromhex('1b69'), bytes.fromhex('1b4a00')]
+            at_page_end = self.chunks[:2] in (final_pair, final_pair[::-1])
+            if self.job and at_page_end and self.finish_delay_ms:
+                delay = max(delay, self.finish_delay_ms)
+                print(json.dumps({'event': 'waiting-before-page-feed', 'delay_ms': delay}), flush=True)
             self.pending = self.chunks.pop(0)
-            self.query_timer = GLib.timeout_add(20, self.start_write)
+            self.query_timer = GLib.timeout_add(delay, self.start_write)
             return False
         self.sent = True
         self.write_watch = None

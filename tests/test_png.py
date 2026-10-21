@@ -11,6 +11,31 @@ from png_job import prepare_png
 
 
 class PngTests(unittest.TestCase):
+    def test_continuous_copies_finish_before_feeding(self):
+        image = Image.new('RGB', (384, 160), 'white')
+        one, _ = self.prepare(image)
+        twenty, _ = self.prepare(image, copies=20)
+        self.assertEqual(one[-2:], [bytes.fromhex('1b69'), bytes.fromhex('1b4a00')])
+        self.assertEqual(twenty, one * 20)
+
+    def test_three_gap_labels_repeat_complete_pages(self):
+        image = Image.new('RGB', (384, 384), 'white')
+        one, _ = self.prepare(image, media='gap', label_height_mm=50)
+        three, _ = self.prepare(image, media='gap', label_height_mm=50, copies=3)
+        self.assertEqual(three, one * 3)
+        self.assertEqual(one[3], bytes.fromhex('1c2502'))
+        self.assertEqual(one[5], bytes.fromhex('1b29') + struct.pack('<HHHB', 385, 500, 500, 0))
+        self.assertEqual(one[-2:], [bytes.fromhex('1b69'), bytes.fromhex('1b4a00')])
+
+    def test_fixed_media_validation(self):
+        image = Image.new('RGB', (384, 384), 'white')
+        for options in ({'media': 'gap'}, {'media': 'gap', 'label_height_mm': 40},
+                        {'copies': 0}, {'label_height_mm': float('nan')}):
+            with self.subTest(options=options), self.assertRaises(ValueError):
+                self.prepare(image, **options)
+        chunks, _ = self.prepare(image, media='black-mark', label_height_mm=50)
+        self.assertEqual(chunks[3], bytes.fromhex('1c2503'))
+
     def prepare(self, image, **kwargs):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'input.png'

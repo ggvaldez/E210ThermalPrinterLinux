@@ -11,7 +11,7 @@ class RasterTests(unittest.TestCase):
         chunks = test_pattern_chunks()
         self.assertEqual(len(chunks), 6 + 152 + 2)
         self.assertEqual(b''.join(chunks), test_pattern()[0])
-        self.assertEqual(chunks[-2:], [bytes.fromhex('1b4a00'), bytes.fromhex('1b69')])
+        self.assertEqual(chunks[-2:], [bytes.fromhex('1b69'), bytes.fromhex('1b4a00')])
 
     def test_java_row_vectors(self):
         self.assertEqual(encode_rows(bytes.fromhex('00800100'), 32, 1), bytes.fromhex('1b190103018001'))
@@ -21,7 +21,7 @@ class RasterTests(unittest.TestCase):
     def test_full_pattern_roundtrip(self):
         packet, pbm = test_pattern()
         self.assertTrue(packet.startswith(bytes.fromhex('1c2106 1b350000 1b340000 1c2500 1b33 1b299900f401c80000')))
-        self.assertTrue(packet.endswith(bytes.fromhex('1b4a001b69')))
+        self.assertTrue(packet.endswith(bytes.fromhex('1b691b4a00')))
         data = packet[25:-5]
         restored = bytearray()
         for _ in range(152):

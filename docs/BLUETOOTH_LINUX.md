@@ -1,5 +1,15 @@
 # Diagnóstico Bluetooth com BlueZ
 
+## Comportamento atual validado
+
+A sequência atual de cada cópia é `configuração → raster → 1B 69 → 1B 4A 00`, sem pausas artificiais por padrão e sem espera adicional de finalização. Essa ordem é usada para todos os tipos de mídia; o comando `1C 25 n` continua distinguindo contínuo, intervalo e marca preta. O avanço em etiquetas com sensor precisa ser reconfirmado após essa alteração. As seções abaixo preservam o histórico da investigação, incluindo a ordem inicial extraída do Java que foi substituída após os testes físicos.
+
+Teste decisivo em papel contínuo: vinte escadas consecutivas de vinte degraus (400 degraus de 1 mm no total), 87.160 bytes, enviadas sem pausas com os comandos finais invertidos em relação ao APK. O usuário confirmou todas completas e coladas. Houve pausas durante a execução, sem perda de conteúdo observada. Isso valida esse fluxo, mas não mede o buffer interno, pois o transporte pode controlar a entrega enquanto a impressora processa.
+
+Antes disso, a escada sem comandos finais expôs somente até o início do 15º degrau. Enviar `1B 4A 00` isolado avançou o papel, e enviar `1B 69` depois fez imprimir o restante. Duas escadas terminadas somente com `1B 69` saíram coladas, mas com quinze degraus cada; com `1B 69` seguido de `1B 4A 00`, ambas tiveram vinte degraus. A semântica completa de cada comando ainda não foi determinada. Uma escada isolada terminou com avanço; a hipótese de posicionamento para destaque ao ficar ociosa é compatível com a observação, mas não foi confirmada como regra do firmware.
+
+Logs locais: `captures/print-staircase-no-final.jsonl`, `captures/staircase-final-command-1b4a00.jsonl`, `captures/staircase-final-command-1b69.jsonl`, `captures/print-two-staircases-no-feed.jsonl`, `captures/print-two-staircases-reversed-final.jsonl`, `captures/print-staircase-separated-first.jsonl` e `captures/print-20-staircases-continuous.jsonl`.
+
 Usamos as APIs D-Bus `Adapter1`, `ProfileManager1`, `Profile1` e `Device1.ConnectProfile`, sem `sdptool` ou `rfcomm` da coleção de ferramentas descontinuadas.
 
 O cliente registra um perfil serial de saída com UUID `00001101-0000-1000-8000-00805f9b34fb`. O BlueZ descobre o serviço remoto e entrega um descritor de socket pelo callback `Profile1.NewConnection`. Assim não é preciso escolher um canal RFCOMM manualmente.
@@ -113,6 +123,22 @@ O envio foi completado ao socket. O usuário confirmou a impressão de moldura, 
 
 ## Impressão de PNG
 
-`tools/print_png.py` prepara arquivos PNG por meio de `tools/png_job.py` e reutiliza a conexão BlueZ e o envio pausado do diagnóstico. O padrão é raster de 384 pixels, proporção preservada, mídia contínua de 50 mm e densidade 6. Transparência é composta sobre branco, seguida de redimensionamento e conversão monocromática. Há opções de prévia, limiar e preparação sem impressão. Consulte o README para os comandos.
+`tools/print_png.py` prepara arquivos PNG por meio de `tools/png_job.py` e reutiliza a conexão BlueZ do diagnóstico. O padrão é raster de 384 pixels, proporção preservada, mídia contínua de 50 mm e densidade 6. Transparência é composta sobre branco, seguida de redimensionamento e conversão monocromática. Há opções de prévia, limiar e preparação sem impressão. Consulte o README para os comandos.
 
 O arquivo local `teste.png` foi enviado pela interface de PNG como raster de 384 × 384 pixels (48 × 48 mm), totalizando 11.713 bytes. O usuário confirmou que a impressão funcionou perfeitamente. O arquivo fornecido pelo usuário permanece local, fora deste commit. Log local: `captures/print-teste-png.jsonl`.
+
+## Etiquetas com intervalo e cópias
+
+Revisão Java: `EditSetActivity.ZZClick.onClick` associa a seleção de intervalo a `paperType = 2`, marca preta a `3` e contínuo a `0`. `PrintActivity` monta listas de páginas/cópias, e `LPBTService.startToPrint` percorre essas páginas. Cada `printImage` configura o papel e termina com `1B 4A 00` e `1B 69` antes de passar à página seguinte.
+
+A interface Python aceita `--media`, `--label-height` e `--copies`. A quantidade é implementada repetindo o trabalho completo. As dimensões do papel são separadas das dimensões do raster: uma imagem de 48 × 48 mm pode usar uma etiqueta lógica de 50 × 50 mm.
+
+Após o usuário trocar a mídia, foi solicitado um teste de três cópias. A mídia foi assumida como etiquetas de 50 × 50 mm com intervalo, pois as dimensões e o sensor ainda não foram medidos. Trabalho: `teste.png`, raster 384 × 384, `1C 25 02`, dimensões lógicas 500/500 em décimos de mm, três páginas, 35.139 bytes. Log local: `captures/print-gap-three-copies.jsonl`. A quantidade física e o alinhamento aguardam confirmação do usuário.
+
+## Comparação de ritmo em bloco preto
+
+Em papel contínuo, foi impresso um bloco inteiramente preto de 384 × 400 pixels (48 × 50 mm), com densidade 10. Com pausas de 20 ms, o usuário observou boa impressão na primeira metade e trancos do motor na segunda. Foi enviado depois o mesmo bloco com pausas de 50 ms, mas não houve avaliação física explícita desse resultado antes do experimento seguinte.
+
+A pedido do usuário, o bloco foi enviado novamente com `--pause-ms 0`: os mesmos 21.230 bytes, em sequência e sem pausas artificiais. O usuário confirmou que **imprimiu melhor**. Isso demonstra melhora nesse teste sem pausas, mas não prova uma causa térmica, elétrica ou de buffering, nem estabelece que esse ritmo seja melhor para todas as imagens.
+
+O resultado contrastou com o primeiro padrão geométrico, que falhou sem pausas e funcionou com 20 ms. A investigação posterior dos comandos finais substituiu essa configuração inicial pelo comportamento descrito no começo deste documento. Logs locais: `captures/print-black-48x50mm-density10.jsonl`, `captures/print-black-48x50mm-density10-pause50.jsonl` e `captures/print-black-48x50mm-density10-pause0.jsonl`.
