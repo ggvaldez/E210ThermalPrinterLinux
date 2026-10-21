@@ -1,0 +1,137 @@
+*PPD-Adobe: "4.3"
+*% PPD file for E210 Bluetooth Thermal Printer
+*% Copyright (C) 2026 E210 Thermal Printer Linux Project
+
+*FormatVersion: "4.3"
+*FileVersion: "1.0"
+*LanguageVersion: English
+*LanguageEncoding: ISOLatin1
+*PCFileName: "E210.PPD"
+*Manufacturer: "Generic"
+*Product: "(E210 Thermal Printer)"
+*ModelName: "E210 Thermal Printer"
+*ShortNickName: "E210"
+*NickName: "E210 Thermal Printer (CUPS)"
+*PSVersion: "(3010.000) 0"
+*LanguageLevel: "3"
+*ColorDevice: False
+*DefaultColorSpace: Gray
+*FileSystem: False
+*Throughput: "1"
+*LandscapeOrientation: Plus90
+*TTRasterizer: Type42
+
+*% CUPS raster filter
+*cupsFilter: "application/vnd.cups-raster 100 rastertoe210"
+*cupsLanguages: "en"
+*cupsVersion: 2.4
+
+*% Resolution
+*OpenUI *Resolution/Resolution: PickOne
+*OrderDependency: 10 AnySetup *Resolution
+*DefaultResolution: 203dpi
+*Resolution 203dpi/203 DPI: "<</HWResolution[203 203]>>setpagedevice"
+*CloseUI: *Resolution
+
+*% Media Types
+*OpenUI *MediaType/Media Type: PickOne
+*OrderDependency: 20 AnySetup *MediaType
+*DefaultMediaType: Continuous
+*MediaType Continuous/Continuous Paper: "<</MediaType(Continuous)>>setpagedevice"
+*MediaType Gap/Die-cut Label (Gap): "<</MediaType(Gap)>>setpagedevice"
+*MediaType BlackMark/Black Mark Label: "<</MediaType(BlackMark)>>setpagedevice"
+*CloseUI: *MediaType
+
+*% Print Density / Darkness (Calibrated 5-10 practical range)
+*OpenUI *Darkness/Print Density: PickOne
+*OrderDependency: 30 AnySetup *Darkness
+*DefaultDarkness: 6
+*Darkness 4/Draft Light (4): ""
+*Darkness 5/Normal Light (5): ""
+*Darkness 6/Normal (6 - Default): ""
+*Darkness 7/Medium (7): ""
+*Darkness 8/Dark (8): ""
+*Darkness 9/Very Dark (9): ""
+*Darkness 10/Maximum (10): ""
+*CloseUI: *Darkness
+
+*% Dithering
+*OpenUI *Dither/Dithering Method: PickOne
+*OrderDependency: 40 AnySetup *Dither
+*DefaultDither: FloydSteinberg
+*Dither FloydSteinberg/Floyd-Steinberg Error Diffusion: ""
+*Dither Threshold/Fixed Threshold (Text/Line Art): ""
+*CloseUI: *Dither
+
+*% Page Sizes
+*OpenUI *PageSize/Media Size: PickOne
+*OrderDependency: 50 AnySetup *PageSize
+*DefaultPageSize: Continuous50mm
+*PageSize Continuous50mm/50mm Continuous Roll: "<</PageSize[142 283]/ImagingBBox null>>setpagedevice"
+*PageSize Label50x80mm/50 x 80 mm Label: "<</PageSize[142 227]/ImagingBBox null>>setpagedevice"
+*PageSize Label50x70mm/50 x 70 mm Label: "<</PageSize[142 198]/ImagingBBox null>>setpagedevice"
+*PageSize Label50x50mm/50 x 50 mm Label: "<</PageSize[142 142]/ImagingBBox null>>setpagedevice"
+*PageSize Label50x30mm/50 x 30 mm Label: "<</PageSize[142 85]/ImagingBBox null>>setpagedevice"
+*PageSize Label40x60mm/40 x 60 mm Label: "<</PageSize[113 170]/ImagingBBox null>>setpagedevice"
+*PageSize Label40x30mm/40 x 30 mm Label: "<</PageSize[113 85]/ImagingBBox null>>setpagedevice"
+*PageSize Label30x30mm/30 x 30 mm Label: "<</PageSize[85 85]/ImagingBBox null>>setpagedevice"
+*PageSize Label30x20mm/30 x 20 mm Label: "<</PageSize[85 57]/ImagingBBox null>>setpagedevice"
+*PageSize CableWrap/38 x 25 mm Cable Wrap Tag: "<</PageSize[108 71]/ImagingBBox null>>setpagedevice"
+*CloseUI: *PageSize
+
+*OpenUI *PageRegion/Media Region: PickOne
+*OrderDependency: 50 AnySetup *PageRegion
+*DefaultPageRegion: Continuous50mm
+*PageRegion Continuous50mm/50mm Continuous Roll: "<</PageSize[142 283]/ImagingBBox null>>setpagedevice"
+*PageRegion Label50x80mm/50 x 80 mm Label: "<</PageSize[142 227]/ImagingBBox null>>setpagedevice"
+*PageRegion Label50x70mm/50 x 70 mm Label: "<</PageSize[142 198]/ImagingBBox null>>setpagedevice"
+*PageRegion Label50x50mm/50 x 50 mm Label: "<</PageSize[142 142]/ImagingBBox null>>setpagedevice"
+*PageRegion Label50x30mm/50 x 30 mm Label: "<</PageSize[142 85]/ImagingBBox null>>setpagedevice"
+*PageRegion Label40x60mm/40 x 60 mm Label: "<</PageSize[113 170]/ImagingBBox null>>setpagedevice"
+*PageRegion Label40x30mm/40 x 30 mm Label: "<</PageSize[113 85]/ImagingBBox null>>setpagedevice"
+*PageRegion Label30x30mm/30 x 30 mm Label: "<</PageSize[85 85]/ImagingBBox null>>setpagedevice"
+*PageRegion Label30x20mm/30 x 20 mm Label: "<</PageSize[85 57]/ImagingBBox null>>setpagedevice"
+*PageRegion CableWrap/38 x 25 mm Cable Wrap Tag: "<</PageSize[108 71]/ImagingBBox null>>setpagedevice"
+*CloseUI: *PageRegion
+
+*% Imageable Area (left bottom right top)
+*DefaultImageableArea: Continuous50mm
+*ImageableArea Continuous50mm/50mm Continuous Roll: "3 0 139 283"
+*ImageableArea Label50x80mm/50 x 80 mm Label: "3 0 139 227"
+*ImageableArea Label50x70mm/50 x 70 mm Label: "3 0 139 198"
+*ImageableArea Label50x50mm/50 x 50 mm Label: "3 0 139 142"
+*ImageableArea Label50x30mm/50 x 30 mm Label: "3 0 139 85"
+*ImageableArea Label40x60mm/40 x 60 mm Label: "3 0 110 170"
+*ImageableArea Label40x30mm/40 x 30 mm Label: "3 0 110 85"
+*ImageableArea Label30x30mm/30 x 30 mm Label: "3 0 82 85"
+*ImageableArea Label30x20mm/30 x 20 mm Label: "3 0 82 57"
+*ImageableArea CableWrap/38 x 25 mm Cable Wrap Tag: "3 0 105 71"
+
+*% Physical paper dimensions
+*DefaultPaperDimension: Continuous50mm
+*PaperDimension Continuous50mm/50mm Continuous Roll: "142 283"
+*PaperDimension Label50x80mm/50 x 80 mm Label: "142 227"
+*PaperDimension Label50x70mm/50 x 70 mm Label: "142 198"
+*PaperDimension Label50x50mm/50 x 50 mm Label: "142 142"
+*PaperDimension Label50x30mm/50 x 30 mm Label: "142 85"
+*PaperDimension Label40x60mm/40 x 60 mm Label: "113 170"
+*PaperDimension Label40x30mm/40 x 30 mm Label: "113 85"
+*PaperDimension Label30x30mm/30 x 30 mm Label: "85 85"
+*PaperDimension Label30x20mm/30 x 20 mm Label: "85 57"
+*PaperDimension CableWrap/38 x 25 mm Cable Wrap Tag: "108 71"
+
+*% Custom Page Size Support
+*VariablePaperSize: True
+*LeadingEdge Short: ""
+*DefaultLeadingEdge: Short
+*MaxMediaWidth: "142"
+*MaxMediaHeight: "2834"
+*HWMargins: 3 0 3 0
+*CustomPageSize True: "pop pop pop <</PageSize[5 -2 roll]/ImagingBBox null>>setpagedevice"
+*ParamCustomPageSize Width: 1 points 57 142
+*ParamCustomPageSize Height: 2 points 28 2834
+*ParamCustomPageSize WidthOffset: 3 points 0 0
+*ParamCustomPageSize HeightOffset: 4 points 0 0
+*ParamCustomPageSize Orientation: 5 int 0 0
+
+*% End of PPD

@@ -30,4 +30,4 @@
 - [x] Provide a command-line interface.
 - [x] Document installation, permissions, and troubleshooting.
 - [x] Add tests for protocol and image processing components.
-- [ ] Evaluate CUPS integration after direct printing stabilizes.
+- [x] Implement CUPS integration (PPD, raster filter, backend, and installer).

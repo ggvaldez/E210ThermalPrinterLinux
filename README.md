@@ -132,6 +132,65 @@ View all options with:
 python tools/print_png.py --help
 ```
 
+## CUPS Printing Integration
+
+You can integrate the E210 with CUPS to use it as a native system printer from browsers, LibreOffice, GIMP, label software, and standard commands like `lp` and `lpr`.
+
+### Installing CUPS Driver
+
+Run the installer with root privileges:
+
+```bash
+sudo ./tools/install_cups.sh
+```
+
+This installs:
+- PPD definition: `/usr/share/cups/model/e210.ppd`
+- CUPS raster filter: `/usr/lib/cups/filter/rastertoe210`
+- CUPS Bluetooth backend: `/usr/lib/cups/backend/e210`
+- Configures and enables printer queue `E210` pointing to `e210://auto`.
+
+### Printing with CUPS
+
+Print a document or image using default settings (50 mm continuous roll, density 6):
+
+```bash
+lp -d E210 document.pdf
+```
+
+Print to die-cut gap labels (e.g., 50 × 50 mm) with increased darkness:
+
+```bash
+lp -d E210 -o media=Label50x50mm -o Darkness=8 label.pdf
+```
+
+Supported media sizes in the PPD:
+- `Continuous50mm` (Default)
+- `Label50x80mm`, `Label50x70mm`, `Label50x50mm`, `Label50x30mm`
+- `Label40x60mm`, `Label40x30mm`
+- `Label30x30mm`, `Label30x20mm`
+- `CableWrap` (38 × 25 mm tag)
+
+To uninstall the CUPS driver and remove the queue:
+
+```bash
+sudo ./tools/uninstall_cups.sh
+```
+
+## Thermal Density Calibration
+
+The printer hardware accepts density values from 0 to 16. However, physical testing showed that practical contrast begins at level 5, reaches optimal darkness between 6 and 10, plateaus between 10 and 15, and level 16 severely degrades (washing out due to thermal duty-cycle throttling).
+
+You can print a full 1–16 calibration strip to inspect your unit's thermal output:
+
+```bash
+# Preview the strip without printing:
+python tools/density_test.py --dry-run --preview /tmp/density_test.png
+
+# Print calibration strip directly to E210:
+python tools/density_test.py
+```
+
 ## Troubleshooting
 
 - **Error importing PIL, dbus, or gi:** check dependencies and make sure you are using the system Python where native packages were installed.
