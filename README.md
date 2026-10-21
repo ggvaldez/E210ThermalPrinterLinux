@@ -30,7 +30,17 @@ sudo systemctl enable --now bluetooth.service
 
 Em outras distribuições, instale os pacotes equivalentes pelo gerenciador da distribuição. A implementação não depende especificamente do CachyOS, mas outras distribuições ainda não foram testadas neste projeto. Os exemplos abaixo usam `python`; se sua distribuição disponibiliza o interpretador como `python3`, substitua o comando.
 
-## Descobrir a impressora
+## Descoberta automática
+
+Sem `--address`, o próprio script procura por uma E210 durante 10 segundos no adaptador selecionado:
+
+```bash
+python tools/print_png.py imagem.png
+```
+
+Ligue a impressora e desconecte-a do celular antes de executar. A busca usa Bluetooth clássico via BlueZ. Se encontrar uma E210, mostra o endereço e imprime; se nenhuma for encontrada, informa o problema. Se houver mais de uma, lista os endereços e pede que você escolha usando `--address`. `--adapter hci1` permite escolher outro adaptador. `--dry-run` não inicia busca nem conexão Bluetooth.
+
+### Descobrir o endereço manualmente
 
 Ligue a E210 e desconecte o Qlabel ou desative o Bluetooth do celular. No terminal, execute:
 
