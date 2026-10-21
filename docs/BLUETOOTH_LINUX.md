@@ -142,3 +142,16 @@ On continuous paper, a fully black block of 384 × 400 pixels (48 × 50 mm) was 
 At the user's request, the block was re-sent with `--pause-ms 0`: the same 21,230 bytes, sequentially without artificial delays. The user confirmed that it **printed better**. This demonstrates an improvement for this unpaused test, but does not prove a thermal, electrical, or buffering cause, nor does it establish that this pacing is optimal for all images.
 
 This finding contrasted with the initial geometric test pattern, which had failed without pauses and succeeded with 20 ms. The subsequent investigation into termination commands resolved the issue, superseding this initial setup with the behavior documented at the start of this file. Local logs: `captures/print-black-48x50mm-density10.jsonl`, `captures/print-black-48x50mm-density10-pause50.jsonl`, and `captures/print-black-48x50mm-density10-pause0.jsonl`.
+
+## Thermal Density Calibration (Levels 1 to 16)
+
+Using `tools/density_test.py`, a full calibration strip covering hardware density levels 1 through 16 was printed on continuous paper. Each block contained black-on-white text with fine lines and an inverted white-on-black solid block.
+
+Observed physical results:
+- **Levels 1 to 4**: Very light / faint output, insufficient for everyday contrast.
+- **Levels 5 and 6**: Useful density begins here. Level 6 produces clean, sharp text and borders without bleeding, validating it as a well-balanced default.
+- **Levels 7 to 10**: Increasingly deep blacks. Level 10 provides solid, high-contrast black fill without motor stutter.
+- **Levels 10 to 15**: Output plateaus; visual contrast and darkness remain practically indistinguishable from level 10.
+- **Level 16**: Fails severely, fading back to the faintness of level 1. This behavior is consistent with duty-cycle / pulse-width limits, voltage drop, or firmware thermal throttling when maximum heat pulse duration is exceeded.
+
+**Conclusion**: The effective operational density range for the E210 is **5 to 10**, with **6** as standard default and **10** as high-contrast maximum. Level 16 should be avoided.
