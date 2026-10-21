@@ -1,32 +1,145 @@
 # E210 Thermal Printer Linux
 
-Projeto para permitir o uso da impressora térmica Bluetooth E210 no Linux, sem depender de um celular.
+Aplicação Python para imprimir imagens PNG na impressora térmica Bluetooth **E210 pelo Linux**, sem depender do celular ou do aplicativo Qlabel durante a impressão.
 
-Segundo o relato inicial do projeto, a forma de impressão disponível atualmente é o aplicativo **Qlabel**, distribuído na Google Play Store. O objetivo é identificar o transporte e o protocolo usados pela impressora e implementar uma ferramenta de impressão para Linux.
+A impressão foi validada fisicamente em uma E210 com **papel contínuo de 50 mm**, usando CachyOS e BlueZ. Tanto o padrão geométrico quanto um PNG enviado pela linha de comando foram impressos corretamente.
 
-## Estado atual
+## Requisitos
 
-Fase de investigação. Ainda não existe driver ou ferramenta funcional neste repositório. Não foram confirmados o fabricante, as variantes do modelo, a resolução, a largura de impressão ou o protocolo.
+- Linux com BlueZ ativo e adaptador Bluetooth com suporte a Bluetooth clássico/RFCOMM.
+- Python 3, Pillow, dbus-python e PyGObject.
+- E210 ligada, com papel contínuo de 50 mm, sem conexão ativa com o celular.
 
-Não presumimos que a E210 use ESC/POS, TSPL, CPCL ou outro protocolo conhecido. Também precisamos verificar se a comunicação ocorre por Bluetooth clássico, BLE ou ambos.
+A comunicação usa as APIs D-Bus atuais do BlueZ. Não é necessário instalar `sdptool` ou as ferramentas Bluetooth descontinuadas.
 
-## Primeiro marco
+## Instalação
 
-Imprimir uma etiqueta de teste a partir do Linux, com instruções reproduzíveis e sem usar o celular durante a impressão.
+Clone o projeto e entre na pasta:
 
-## Plano
+```bash
+git clone https://github.com/ggvaldez/E210ThermalPrinterLinux.git
+cd E210ThermalPrinterLinux
+```
 
-1. Identificar a unidade física, o aplicativo e o ambiente Linux.
-2. Descobrir os serviços e as características Bluetooth expostos pela impressora.
-3. Obter uma captura de uma impressão conhecida realizada pelo Qlabel.
-4. Documentar os comandos, o formato da imagem e o fluxo de comunicação observados.
-5. Implementar uma prova de conceito e validar a impressão na impressora real.
-6. Evoluir para uma interface de linha de comando e avaliar integração com CUPS.
+No CachyOS ou Arch Linux, instale as dependências nativas:
 
-Consulte [ROADMAP.md](ROADMAP.md) e o [roteiro de investigação](docs/INVESTIGACAO.md).
+```bash
+sudo pacman -S --needed bluez bluez-utils python python-pillow python-dbus python-gobject
+sudo systemctl enable --now bluetooth.service
+```
 
-## Desenvolvimento
+Em outras distribuições, instale os pacotes equivalentes pelo gerenciador da distribuição. A implementação não depende especificamente do CachyOS, mas outras distribuições ainda não foram testadas neste projeto. Os exemplos abaixo usam `python`; se sua distribuição disponibiliza o interpretador como `python3`, substitua o comando.
 
-A linguagem e as dependências serão definidas após identificar o transporte e o protocolo. Cada descoberta deve indicar sua fonte, as condições do teste e o resultado observado, distinguindo fatos de hipóteses.
+## Descobrir a impressora
 
-Capturas podem conter endereços Bluetooth e outros identificadores. Revise esses dados antes de incluí-los no repositório público.
+Ligue a E210 e desconecte o Qlabel ou desative o Bluetooth do celular. No terminal, execute:
+
+```bash
+bluetoothctl
+```
+
+Dentro do `bluetoothctl`:
+
+```text
+power on
+scan on
+```
+
+Aguarde aparecer uma linha semelhante a esta e anote o endereço da sua impressora:
+
+```text
+Device AA:BB:CC:DD:EE:FF E210
+```
+
+Encerre a busca e saia:
+
+```text
+scan off
+quit
+```
+
+Na unidade testada, a conexão funcionou sem pareamento manual. O programa descobre o canal serial pelo UUID do serviço; não é necessário configurar um canal RFCOMM.
+
+## Imprimir um PNG
+
+Execute na raiz do projeto, substituindo o caminho da imagem e o endereço Bluetooth:
+
+```bash
+python tools/print_png.py imagem.png --address AA:BB:CC:DD:EE:FF
+```
+
+Cada execução imprime **uma cópia**. Caminhos com espaços devem ficar entre aspas.
+
+A imagem é redimensionada para **384 pixels de largura**, preservando a proporção. Essa é a maior largura raster validada até agora, equivalente a **48 mm a 8 pixels/mm**, aproximadamente 203 dpi. Ainda não determinamos o limite físico absoluto da impressora.
+
+Para máxima nitidez e controle pixel a pixel, prepare o PNG já com 384 pixels de largura. Um arquivo de 384 × 384 pixels produz um raster de aproximadamente 48 × 48 mm. Metadados DPI do PNG não alteram o tamanho; a altura é calculada a partir da proporção da imagem. O avanço e as margens físicas podem diferir do tamanho do raster.
+
+Transparência é composta sobre fundo branco. Tons de cinza são convertidos para preto e branco com dithering Floyd–Steinberg. O envio mantém pausas de **20 ms entre comandos e linhas**, necessárias para a impressão correta nos testes realizados.
+
+### Prévia sem imprimir
+
+```bash
+python tools/print_png.py imagem.png --dry-run --preview previa.png
+```
+
+Esse comando prepara a imagem sem conectar à impressora. A prévia não sobrescreve arquivos existentes.
+
+### Ajustes
+
+Para usar um limiar fixo de preto e branco, em vez de dithering:
+
+```bash
+python tools/print_png.py imagem.png --address AA:BB:CC:DD:EE:FF --threshold 128
+```
+
+Para ajustar a densidade térmica ou selecionar outro adaptador:
+
+```bash
+python tools/print_png.py imagem.png --address AA:BB:CC:DD:EE:FF --density 6 --adapter hci0
+```
+
+`--density` aceita valores de 0 a 16 e tem padrão 6. `--threshold` aceita de 0 a 255. Consulte todas as opções com:
+
+```bash
+python tools/print_png.py --help
+```
+
+## Diagnóstico
+
+- **Erro ao importar PIL, dbus ou gi:** confira as dependências e use o Python do sistema que recebeu os pacotes nativos.
+- **Não conecta:** confira a alimentação, o endereço Bluetooth e o serviço `bluetooth.service`; desconecte a impressora de outros dispositivos. A conta deve ter acesso ao serviço BlueZ no barramento D-Bus do sistema.
+- **Pontos na mesma linha ou desenho incompleto:** use o comando de PNG, que já inclui as pausas entre envios. O primeiro teste sem pausas falhou dessa forma.
+- **Demora para imprimir:** a pausa de 20 ms limita o envio a aproximadamente 50 linhas por segundo, além do tempo de conexão e processamento.
+
+Para consultar o status sem imprimir:
+
+```bash
+python tools/probe_bluez.py AA:BB:CC:DD:EE:FF --query status --timeout 20
+```
+
+“Envio concluído” confirma a transferência ao socket, não a saída física do papel. Nos testes, a impressão correta foi confirmada por observação do usuário.
+
+## Outras impressoras e plataformas
+
+**Precisa de suporte a outra impressora ou a outra plataforma, como Windows ou macOS? [Abra uma issue](https://github.com/ggvaldez/E210ThermalPrinterLinux/issues).**
+
+Informe o modelo exato, o sistema operacional e sua versão e, se houver, o aplicativo que funciona com o equipamento. Essas informações ajudam a investigar a compatibilidade. Novos modelos e plataformas ainda precisam de implementação e testes.
+
+A conversão de PNG e a codificação dos comandos usam Python e podem ser reaproveitadas em outras plataformas. A conexão atual depende do BlueZ no Linux. Não presumimos que outras impressoras usem o mesmo protocolo da E210.
+
+## Desenvolvimento e documentação
+
+Para executar os testes automatizados:
+
+```bash
+python -m unittest discover -s tests -v
+```
+
+- [Análise Java e formato dos comandos](docs/ANALISE_JAVA.md)
+- [Conexão BlueZ e resultados dos testes físicos](docs/BLUETOOTH_LINUX.md)
+- [Roteiro de investigação](docs/INVESTIGACAO.md)
+- [Roadmap](ROADMAP.md)
+
+O Qlabel 29.0.22 serviu de referência para investigar o protocolo. A aplicação Python não precisa do APK, do Android ou de bibliotecas nativas extraídas do aplicativo para funcionar.
+
+APKs, decompilações, logs e capturas locais ficam fora do controle de versão. Revise identificadores de dispositivos antes de publicar capturas ou logs em uma issue.
